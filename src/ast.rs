@@ -1,4 +1,5 @@
 use std::fmt;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BinOperator {
@@ -61,6 +62,7 @@ impl fmt::Display for UnOperator {
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
+    FunctionLiteral(String),
     Variable(String),
     BinaryOperation {
         operator: BinOperator,
@@ -78,6 +80,7 @@ impl fmt::Display for Expression {
         match self {
             Expression::IntLiteral(i) => write!(f, "{}", i),
             Expression::BoolLiteral(b) => write!(f, "{}", b),
+            Expression::FunctionLiteral(ff) => write!(f, "{}", ff),
             Expression::Variable(var) => write!(f, "{}", var),
             Expression::BinaryOperation {  operator, left, right } => {
                 write!(f, "({} {} {})", left, operator, right)
@@ -143,12 +146,39 @@ impl fmt::Display for Body {
 
 
 #[derive(Debug, Clone)]
-pub struct Program {
+pub struct Function {
+    pub arguments: Vec<String>,
     pub body: Body
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(")?;
+        for (i, statement) in self.arguments.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{};", statement)?;
+        }
+        write!(f, ") {{\n{}}}", self.body)?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Program {
+    pub functions: HashMap<String, Function>
 }
 
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.body)
+        for (i, (name, function)) in self.functions.iter().enumerate() {
+            if i > 0 {
+                write!(f, "\n\n")?;
+            }
+            write!(f, "{}{}", name, function)?;
+        }
+        Ok(())
     }
 }

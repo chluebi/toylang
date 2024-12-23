@@ -56,7 +56,8 @@ impl std::error::Error for InterpreterErrorMessage {}
 pub fn eval_expression(state: &InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>) -> Result<ast::Expression, InterpreterErrorMessage> {
     match expression {
         ast::Expression::IntLiteral(_)
-        | ast::Expression::BoolLiteral(_) => Ok(expression.clone()),
+        | ast::Expression::BoolLiteral(_)
+        | &ast::Expression::FunctionLiteral(_) => Ok(expression.clone()),
         ast::Expression::Variable(var) => {
             match (*state).values.get(var) {
                 Some(v) => Ok(v.clone()),
@@ -231,21 +232,33 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -
         ast::Statement::While { ref condition, ref body } => {
             let eval_condition = eval_expression(&state, &condition, stmt_ref.clone())?;
 
-            match eval_condition {
-                ast::Expression::BoolLiteral(b) => {
-                    if b {
-                        interpret_body(state, &body)?;
-                        interpret_statement(state, stmt)?;
-                    };
-                    Ok(())
-                }
+            let mut cond = match eval_condition {
+                ast::Expression::BoolLiteral(b) => b,
                 x => {
                     return Err(InterpreterErrorMessage {
                         error: InterpreterError::Panic(format!("Using non-bool value in loop: {}", x)),
                         statement: Some(stmt_ref)
                     });
                 }
+            };
+
+            while cond  {
+                interpret_body(state, &body)?;
+
+                let eval_condition = eval_expression(&state, &condition, stmt_ref.clone())?;
+                cond = match eval_condition {
+                    ast::Expression::BoolLiteral(b) => b,
+                    x => {
+                        return Err(InterpreterErrorMessage {
+                            error: InterpreterError::Panic(format!("Using non-bool value in loop: {}", x)),
+                            statement: Some(stmt_ref)
+                        });
+                    }
+                };
             }
+
+
+            Ok(())
         }
     };
 
@@ -274,10 +287,10 @@ pub fn interpret(program: &ast::Program) -> Result<ast::Expression, InterpreterE
         return_value: None
     };
 
-    let program_clone = program.clone();
-    let last_statement = program_clone.body.statements.last();
+    let main = program.functions.get(&"main".to_string()).unwrap();
+    let last_statement = main.body.statements.last();
 
-    interpret_body(&mut state, &program.body)?;
+    interpret_body(&mut state, &main.body)?;
     
     if let Some(v) = &state.return_value {
         println!("{}", state);
