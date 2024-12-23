@@ -4,14 +4,16 @@ use std::fmt;
 
 use crate::ast::{self, Expression};
 
+type FunctionFrame = HashMap<String, ast::Expression>;
 pub struct InterpreterState {
-    values: HashMap<String, ast::Expression>,
+    stack: Vec<FunctionFrame>,
+    values: FunctionFrame,
     return_value: Option<ast::Expression>
 }
 
 impl fmt::Display for InterpreterState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Variables {:?}, Returns {}", self.values, 
+        write!(f, "Stack Size {}, Variables {:?}, Returns {}", self.stack.len(), self.values, 
             match &self.return_value {
                 Some(v) => v.to_string(),
                 None => "[Empty]".to_string()
@@ -53,7 +55,7 @@ impl fmt::Display for InterpreterErrorMessage {
 impl std::error::Error for InterpreterErrorMessage {}
 
 
-pub fn eval_expression(state: &InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>) -> Result<ast::Expression, InterpreterErrorMessage> {
+pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
     match expression {
         ast::Expression::IntLiteral(_)
         | ast::Expression::BoolLiteral(_)
@@ -68,8 +70,8 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::Expression, s
             }
         },
         ast::Expression::BinaryOperation { operator, left, right } => {
-            let left = eval_expression(state, left, statement.clone())?;
-            let right = eval_expression(state, right, statement.clone())?;
+            let left = eval_expression(state, left, statement.clone(), program)?;
+            let right = eval_expression(state, right, statement.clone(), program)?;
             match operator {
                 ast::BinOperator::Add 
                 | ast::BinOperator::Sub 
@@ -149,7 +151,7 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::Expression, s
             }
         },
         ast::Expression::UnaryOperation { operator, expression } => {
-            let expression = eval_expression(state, expression, statement.clone())?;
+            let expression = eval_expression(state, expression, statement.clone(), program)?;
 
             match operator {
                 ast::UnOperator::Neg => {
@@ -189,37 +191,66 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::Expression, s
                     return Ok(ast::Expression::BoolLiteral(res));
                 }
             }
+        },
+        ast::Expression::FunctionCall { function_name, arguments } => {
+            let function = match program.functions.get(function_name) {
+                Some(f) => f,
+                _ => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::VariableNotFound(function_name.clone()),
+                    statement: Some(statement)
+                })
+            };
+
+            let argument_values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
+                = arguments.iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
+            let argument_values: Vec<ast::Expression> = argument_values?;
+
+            state.stack.push(state.values.clone());
+
+            let new_values: HashMap<String, ast::Expression> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).collect();
+            state.values = new_values;
+
+            interpret_function_body(state, function, function_name, program)
         }
     }
 }
 
-pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -> Result<(), InterpreterErrorMessage> {
+pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
     let stmt_ref = Rc::new(stmt.clone());
     let eval = match stmt {
         ast::Statement::Assignment {variable, expression} => {
-            let v = eval_expression(&state, &expression, stmt_ref)?;
+            let v = eval_expression(state, &expression, stmt_ref, program)?;
             state.values.entry(variable).and_modify(|value| *value = v.clone()).or_insert(v);
-            Ok(())
+            Ok(None)
         },
         ast::Statement::Return { expression } => {
-            match eval_expression(&state, &expression, stmt_ref) {
+            match eval_expression(state, &expression, stmt_ref.clone(), program) {
                 Ok(v) => {
-                    state.return_value = Some(v);
-                    Ok(())
+                    state.return_value = Some(v.clone());
+                    match state.stack.pop() {
+                        Some(s) => {state.values = s},
+                        _ => {
+                            return Err(InterpreterErrorMessage {
+                                error: InterpreterError::Panic("Returning with empty stack frame".to_string()),
+                                statement: Some(stmt_ref)
+                            })
+                        }
+                    }
+                    Ok(Some(v))
                 }
                 Err(err) => Err(err)
             }
         },
         ast::Statement::IfElse { condition, if_body, else_body } => {
-            let eval_condition = eval_expression(&state, &condition, stmt_ref.clone())?;
+            let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
 
             match eval_condition {
                 ast::Expression::BoolLiteral(b) => {
                     match b {
-                        true => interpret_body(state, &if_body),
-                        false => interpret_body(state, &else_body),
+                        true => interpret_body(state, &if_body, program),
+                        false => interpret_body(state, &else_body, program),
                     }?;
-                    Ok(())
+                    Ok(None)
                 }
                 x => {
                     return Err(InterpreterErrorMessage {
@@ -230,7 +261,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -
             }
         },
         ast::Statement::While { ref condition, ref body } => {
-            let eval_condition = eval_expression(&state, &condition, stmt_ref.clone())?;
+            let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
 
             let mut cond = match eval_condition {
                 ast::Expression::BoolLiteral(b) => b,
@@ -243,9 +274,9 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -
             };
 
             while cond  {
-                interpret_body(state, &body)?;
+                interpret_body(state, &body, program)?;
 
-                let eval_condition = eval_expression(&state, &condition, stmt_ref.clone())?;
+                let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
                 cond = match eval_condition {
                     ast::Expression::BoolLiteral(b) => b,
                     x => {
@@ -258,7 +289,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -
             }
 
 
-            Ok(())
+            Ok(None)
         }
     };
 
@@ -266,16 +297,36 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement) -
         return Err(err);
     }
 
-    Ok(())
+    eval
 }
 
-pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body) -> Result<(), InterpreterErrorMessage> {
+pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
     for stmt in body.statements.clone() {
         println!("{}", state);
         println!("{}", stmt);
-        interpret_statement(state, stmt)?;
+        match interpret_statement(state, stmt, program) {
+            Err(e) => return Err(e),
+            Ok(Some(v)) => return Ok(Some(v)),
+            Ok(_) => {}
+        };
     }
-    return Ok(());
+    return Ok(None);
+}
+
+pub fn interpret_function_body(state: &mut InterpreterState, function: &ast::Function, function_name: &String, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage>{
+    interpret_body(state, &function.body, program)?;
+    
+    if let Some(v) = &state.return_value {
+        println!("returning {} from function with {}", v, state);
+        return Ok(v.clone());
+    }
+
+    return Err(
+        InterpreterErrorMessage {
+            error: InterpreterError::Panic(format!("Function {} did not return", function_name)),
+            statement: None
+        }
+    )
 }
 
 pub fn interpret(program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
@@ -283,30 +334,12 @@ pub fn interpret(program: &ast::Program) -> Result<ast::Expression, InterpreterE
     println!("{}", program);
 
     let mut state = InterpreterState {
+        stack: vec![HashMap::new()],
         values: HashMap::new(),
         return_value: None
     };
 
     let main = program.functions.get(&"main".to_string()).unwrap();
-    let last_statement = main.body.statements.last();
 
-    interpret_body(&mut state, &main.body)?;
-    
-    if let Some(v) = &state.return_value {
-        println!("{}", state);
-        return Ok(v.clone());
-    }
-
-    return Err(
-        match last_statement {
-            Some(s) => InterpreterErrorMessage {
-                    error: InterpreterError::Panic("No return statement".to_string()),
-                    statement: Some(Rc::new(s.clone()))
-            },
-            _ => InterpreterErrorMessage {
-                error: InterpreterError::Panic("Empty Body".to_string()),
-                statement: None
-            }
-        }
-    )
+    interpret_function_body(&mut state, &main, &"main".to_string(), program)
 }

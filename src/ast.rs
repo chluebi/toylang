@@ -72,6 +72,10 @@ pub enum Expression {
     UnaryOperation {
         operator: UnOperator,
         expression: Box<Expression>
+    },
+    FunctionCall {
+        function_name: String,
+        arguments: Vec<Expression>
     }
 }
 
@@ -87,6 +91,16 @@ impl fmt::Display for Expression {
             },
             Expression::UnaryOperation { operator, expression } => {
                 write!(f, "({} {})", operator, expression)
+            },
+            Expression::FunctionCall { function_name: function, arguments } => {
+                write!(f, "{}(", function);
+                for (i, arg) in arguments.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ");
+                    }
+                    write!(f, "{}", arg);
+                }
+                write!(f, ")")
             }
         }
     }

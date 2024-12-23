@@ -3,7 +3,7 @@ mod interpreter;
 mod programs;
 
 fn main() {
-    let program = programs::long_while::get_program();
+    let program = programs::recursive_fib::get_program();
 
     let res = interpreter::interpret(&program);
 
