@@ -1,0 +1,30 @@
+square(x) {
+    return x * x;
+}
+
+square_loop(x) {
+    i = 0;
+    y = 0;
+    d = 1;
+
+    while (i < x) {
+        y = y + d;
+        d = d + 2;
+        i = i + 1;
+    }
+
+    return y;
+}
+
+main() {
+    i = 0;
+
+    while (i < 100) {
+        if (square(i) != square_loop(i)) {
+            return false;
+        } else {}
+        i = i + 1;
+    }
+
+    return true;
+}

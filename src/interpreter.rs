@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::fmt;
 
-use crate::ast::{self, Expression};
+use crate::ast;
 
 type FunctionFrame = HashMap<String, ast::Expression>;
 pub struct InterpreterState {
@@ -209,6 +209,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
 
             let new_values: HashMap<String, ast::Expression> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).collect();
             state.values = new_values;
+            state.return_value = None;
 
             interpret_function_body(state, function, function_name, program)
         }

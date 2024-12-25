@@ -93,12 +93,12 @@ impl fmt::Display for Expression {
                 write!(f, "({} {})", operator, expression)
             },
             Expression::FunctionCall { function_name: function, arguments } => {
-                write!(f, "{}(", function);
+                write!(f, "{}(", function)?;
                 for (i, arg) in arguments.iter().enumerate() {
                     if i > 0 {
-                        write!(f, ", ");
+                        write!(f, ", ")?;
                     }
-                    write!(f, "{}", arg);
+                    write!(f, "{}", arg)?;
                 }
                 write!(f, ")")
             }
@@ -152,7 +152,9 @@ impl fmt::Display for Body {
             if i > 0 {
                 write!(f, "\n")?;
             }
-            write!(f, "{};", statement)?;
+            for line in format!("{};", statement).split('\n') {
+                write!(f, "\t{}\n", line)?;
+            }
         }
         Ok(())
     }
@@ -161,6 +163,7 @@ impl fmt::Display for Body {
 
 #[derive(Debug, Clone)]
 pub struct Function {
+    pub name: String,
     pub arguments: Vec<String>,
     pub body: Body
 }
@@ -174,7 +177,7 @@ impl fmt::Display for Function {
             }
             write!(f, "{};", statement)?;
         }
-        write!(f, ") {{\n{}}}", self.body)?;
+        write!(f, ") {{\n{}\n}}", self.body)?;
         Ok(())
     }
 }

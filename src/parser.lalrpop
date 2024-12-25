@@ -1,0 +1,262 @@
+use std::str::FromStr;
+use std::collections::HashMap;
+
+use crate::ast;
+
+grammar;
+
+// The entry point of the grammar
+pub Grammar: ast::Program = {
+    <fs:Functions> => {
+        ast::Program {
+            functions: fs
+        }
+    }
+};
+
+Functions: HashMap<String, ast::Function> = {
+    <fs:Functions> <f:Function> => {
+        let mut funcs = fs;
+        funcs.insert(f.name.clone(), f);
+        funcs
+    },
+    <f:Function> => {
+        let mut funcs = HashMap::new();
+        funcs.insert(f.name.clone(), f);
+        funcs
+    }
+};
+
+Function: ast::Function = {
+    <name:Ident> "(" <args:Arguments> ")" "{" <body:Body> "}" => {
+        ast::Function {
+            name: name,
+            arguments: args,
+            body: body,
+        }
+    }
+};
+
+
+Arguments: Vec<String> = {
+    <arg:Argument> "," <args:Arguments> => {
+        let mut args = args;
+        args.insert(0, arg);
+        args
+    },
+    <arg:Argument> => vec![arg],
+    => vec![]
+};
+
+
+Argument: String = {
+    <i:Ident> => i,
+};
+
+
+Body: ast::Body = {
+    <stmts:Statements> => {
+        ast::Body {
+            statements: stmts
+        }
+    },
+};
+
+
+Statements: Vec<ast::Statement> = {
+    <stmt:Statement> ";" <stmts:Statements> => {
+        let mut stmts = stmts;
+        stmts.insert(0, stmt);
+        stmts
+    },
+    <stmt:ControlFlow> <stmts:Statements> => {
+        let mut stmts = stmts;
+        stmts.insert(0, stmt);
+        stmts
+    },
+    <stmt:Statement> => vec![stmt],
+    => vec![]
+};
+
+
+ControlFlow: ast::Statement = {
+    "if (" <c:Expression> ")" "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
+        ast::Statement::IfElse {
+            condition: c,
+            if_body: if_body,
+            else_body: else_body
+        }
+    },
+    "while" "(" <c:Expression> ")" "{" <b:Body> "}" => {
+        ast::Statement::While {
+            condition: c,
+            body: b
+        }
+    }
+}
+
+
+Statement: ast::Statement = {
+    <i:Ident> "=" <e:Expression> => {
+        ast::Statement::Assignment {
+            variable: i,
+            expression: e
+        }
+    },
+    "return" <e:Expression> => {
+        ast::Statement::Return {
+            expression: e
+        }
+    }
+};
+
+
+Expression: ast::Expression = {
+    #[precedence(level="0")]
+    Term,
+    #[precedence(level="1")] #[assoc(side="left")]
+    <id:Ident> "(" <args:CallArgs> ")" => {
+        ast::Expression::FunctionCall {
+            function_name: id,
+            arguments: args
+        }
+    },
+    #[precedence(level="2")] #[assoc(side="left")]
+    "-" <e:Term> => {
+        ast::Expression::UnaryOperation {
+            operator: ast::UnOperator::Neg,
+            expression: Box::new(e),
+        }
+    },
+    "~" <e:Term> => {
+        ast::Expression::UnaryOperation {
+            operator: ast::UnOperator::Not,
+            expression: Box::new(e),
+        }
+    },
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expression> "*" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Mul,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "/" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Div,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "%" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Mod,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expression> "+" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Add,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "-" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Sub,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expression> "&&" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::And,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expression> "||" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Or,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    #[precedence(level="7")] #[assoc(side="left")]
+    <l:Expression> "==" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Eq,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "!=" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Neq,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "<" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Lt,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> ">" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Gt,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> "<=" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Leq,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    <l:Expression> ">=" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::Geq,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    }
+}
+
+
+Term: ast::Expression = {
+    "true" => ast::Expression::BoolLiteral(true),
+    "false" => ast::Expression::BoolLiteral(false),
+    <n:Num> => ast::Expression::IntLiteral(n),
+    <id: Ident> => ast::Expression::Variable(id),
+    "(" <e: Expression> ")" => e
+}
+
+
+CallArgs: Vec<ast::Expression> = {
+    <arg:Expression> "," <args:CallArgs> => {
+        let mut args = args;
+        args.insert(0, arg);
+        args
+    },
+    <arg:Expression> => vec![arg],
+    => vec![]
+}
+
+
+
+Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+
+
+Ident: String = {
+    <id:r"[a-zA-Z_][a-zA-Z0-9_]*"> => id.to_string(),
+};
