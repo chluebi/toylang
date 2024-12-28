@@ -1,0 +1,25 @@
+
+
+main() {
+    a = [1, true, [1, 2], 5, tuple(3, 4, 5)];
+    
+    i = 0;
+    while (i < ?a) {
+        if (a[i] ?? int) {
+            a[i] = a[i] * 3;
+        } else {}
+        if (a[i] ?? bool) {
+            a[i] = !(a[i]);
+        } else {}
+        if (a[i] ?? list) {
+            a[i] = a[i] ++ [3, 4];
+        } else {}
+        if (a[i] ?? tuple) {
+            a[i] = tuple(9, 9);
+        } else {}
+
+        i = i + 1;
+    }
+
+    return a;
+}

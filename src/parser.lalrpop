@@ -142,7 +142,7 @@ Expression: ast::Expression = {
             expression: Box::new(e),
         }
     },
-    "~" <e:Term> => {
+    "!" <e:Term> => {
         ast::Expression::UnaryOperation {
             operator: ast::UnOperator::Not,
             expression: Box::new(e),
@@ -200,6 +200,13 @@ Expression: ast::Expression = {
         }
     },
     #[precedence(level="6")] #[assoc(side="left")]
+    <l:Expression> "??" <r:Type> => {
+        ast::Expression::Typecheck {
+            expression: Box::new(l),
+            expected_type: r
+        }
+    },
+    #[precedence(level="7")] #[assoc(side="left")]
     <l:Expression> "&&" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::And,
@@ -207,7 +214,7 @@ Expression: ast::Expression = {
             right: Box::new(r)
         }
     },
-    #[precedence(level="7")] #[assoc(side="left")]
+    #[precedence(level="8")] #[assoc(side="left")]
     <l:Expression> "||" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Or,
@@ -215,7 +222,7 @@ Expression: ast::Expression = {
             right: Box::new(r)
         }
     },
-    #[precedence(level="8")] #[assoc(side="left")]
+    #[precedence(level="9")] #[assoc(side="left")]
     <l:Expression> "==" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Eq,
@@ -280,6 +287,12 @@ CommaSeperatedExpressions: Vec<ast::Expression> = {
     => vec![]
 }
 
+Type: ast::Type = {
+    "int" => ast::Type::Int,
+    "bool" => ast::Type::Bool,
+    "tuple" => ast::Type::Tuple,
+    "list" => ast::Type::List
+}
 
 
 Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();

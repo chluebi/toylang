@@ -63,8 +63,7 @@ impl std::error::Error for InterpreterErrorMessage {}
 pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
     match expression {
         ast::Expression::IntLiteral(_)
-        | ast::Expression::BoolLiteral(_)
-        | &ast::Expression::FunctionLiteral(_) => Ok(expression.clone()),
+        | ast::Expression::BoolLiteral(_) => Ok(expression.clone()),
         ast::Expression::Variable(var) => {
             match (*state).values.get(var) {
                 Some(v) => Ok(v.clone()),
@@ -73,6 +72,17 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                     statement: Some(statement)
                 })
             }
+        },
+        ast::Expression::Typecheck { expression, expected_type } => {
+            let expression = eval_expression(state, expression, statement.clone(), program)?;
+
+            return Ok(ast::Expression::BoolLiteral( match (expression, expected_type) {
+                (ast::Expression::IntLiteral(_), ast::Type::Int) 
+                | (ast::Expression::BoolLiteral(_), ast::Type::Bool)
+                | (ast::Expression::Tuple { elements: _ }, ast::Type::Tuple)
+                | (ast::Expression::ListReference { elements_ref: _ }, ast::Type::List) => true,
+                (_, _) => false
+            }));
         },
         ast::Expression::BinaryOperation { operator, left, right } => {
             let left = eval_expression(state, left, statement.clone(), program)?;

@@ -4,6 +4,25 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
+pub enum Type {
+    Int,
+    Bool,
+    Tuple,
+    List
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int => write!(f, "int"),
+            Type::Bool => write!(f, "bool"),
+            Type::Tuple => write!(f, "tuple"),
+            Type::List => write!(f, "list"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum BinOperator {
     Add,
     Sub,
@@ -70,8 +89,11 @@ impl fmt::Display for UnOperator {
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
-    FunctionLiteral(String),
     Variable(String),
+    Typecheck {
+        expression: Box<Expression>,
+        expected_type: Type
+    },
     BinaryOperation {
         operator: BinOperator,
         left: Box<Expression>,
@@ -102,8 +124,10 @@ impl fmt::Display for Expression {
         match self {
             Expression::IntLiteral(i) => write!(f, "{}", i),
             Expression::BoolLiteral(b) => write!(f, "{}", b),
-            Expression::FunctionLiteral(ff) => write!(f, "{}", ff),
             Expression::Variable(var) => write!(f, "{}", var),
+            Expression::Typecheck { expression, expected_type } => {
+                write!(f, "({} ?? {})", expression, expected_type)
+            }
             Expression::BinaryOperation {  operator, left, right } => {
                 write!(f, "({} {} {})", left, operator, right)
             },
