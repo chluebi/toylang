@@ -455,8 +455,8 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
 
 pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
     for stmt in body.statements.clone() {
-        println!("{}", state);
-        println!("{}", stmt);
+        // println!("{}", state);
+        // println!("{}", stmt);
         match interpret_statement(state, stmt, program) {
             Err(e) => return Err(e),
             Ok(Some(v)) => return Ok(Some(v)),
@@ -470,7 +470,7 @@ pub fn interpret_function_body(state: &mut InterpreterState, function: &ast::Fun
     interpret_body(state, &function.body, program)?;
     
     if let Some(v) = &state.return_value {
-        println!("returning {} from function with {}", v, state);
+        // println!("returning {} from function with {}", v, state);
         return Ok(v.clone());
     }
 

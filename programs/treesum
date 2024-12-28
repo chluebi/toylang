@@ -1,0 +1,20 @@
+
+treesum(l) {
+    s = 0;
+    i = 0;
+    while (i < ?l) {
+        if (l[i] ?? int) {
+            s = s + l[i];
+        } else {}
+        if (l[i] ?? list) {
+            s = s + treesum(l[i]);
+        } else {}
+        i = i + 1;
+    }
+    return s;
+}
+
+main() {
+    a = [[1], [[5], [1, 2]], 2];
+    return treesum(a);
+}
