@@ -1,4 +1,6 @@
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
@@ -17,7 +19,9 @@ pub enum BinOperator {
     Lt,
     Gt,
     Leq,
-    Geq
+    Geq,
+
+    ListConcat,
 }
 
 impl fmt::Display for BinOperator {
@@ -38,6 +42,8 @@ impl fmt::Display for BinOperator {
             BinOperator::Gt => write!(f, ">"),
             BinOperator::Leq => write!(f, "<="),
             BinOperator::Geq => write!(f, ">="),
+
+            BinOperator::ListConcat => write!(f, "++"),
         }
     }
 }
@@ -45,14 +51,16 @@ impl fmt::Display for BinOperator {
 #[derive(Debug, Clone, Copy)]
 pub enum UnOperator {
     Neg,
-    Not
+    Not,
+    Length
 }
 
 impl fmt::Display for UnOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnOperator::Neg => write!(f, "-"),
-            UnOperator::Not => write!(f, "!")
+            UnOperator::Not => write!(f, "!"),
+            UnOperator::Length => write!(f, "?")
         }
     }
 }
@@ -79,6 +87,9 @@ pub enum Expression {
     },
     Tuple {
         elements: Vec<Expression>
+    },
+    ListReference {
+        elements_ref: Rc<RefCell<Vec<Expression>>>
     },
     Indexing {
         indexed: Box<Expression>,
@@ -118,6 +129,16 @@ impl fmt::Display for Expression {
                     write!(f, "{}", elt)?;
                 }
                 write!(f, ")")
+            },
+            Expression::ListReference { elements_ref } => {
+                write!(f, "[")?;
+                for (i, elt) in elements_ref.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elt)?;
+                }
+                write!(f, "]")
             },
             Expression::Indexing { indexed, indexer } => {
                 write!(f, "{}[{}]", indexed, indexer)

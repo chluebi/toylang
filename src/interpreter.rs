@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::cell::RefCell;
 use std::fmt;
 
 use crate::ast;
@@ -36,7 +37,7 @@ impl fmt::Display for InterpreterError {
             InterpreterError::Panic(err) => write!(f, "Interpreter Panic: {}", err),
             InterpreterError::InvalidType(expr, expected_type, comment) => write!(f, "Using {} operation on {}: {}", expected_type, expr, comment),
             InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var),
-            InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", expr, index),
+            InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", index, expr),
         }
     }
 }
@@ -89,8 +90,12 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                 | ast::BinOperator::Leq
                 | ast::BinOperator::Geq
                 => {
-                    let evaled = match (left, right) {
+                    let evaled = match (left.clone(), right) {
                         (ast::Expression::IntLiteral(left), ast::Expression::IntLiteral(right)) => Ok((left, right)),
+                        (ast::Expression::ListReference { elements_ref }, x) => {
+                            elements_ref.borrow_mut().push(x);
+                            return Ok(left.clone());
+                        },
                         (ast::Expression::IntLiteral(_), x) => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
@@ -151,7 +156,35 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                     };
 
                     return Ok(ast::Expression::BoolLiteral(res));
-                }                
+                },
+                ast::BinOperator::ListConcat => {
+                    let evaled = match (left, right) {
+                        (ast::Expression::ListReference {elements_ref: left}, ast::Expression::ListReference{elements_ref: right}) => Ok((left, right)),
+                        (ast::Expression::ListReference {elements_ref: _}, x) => Err(
+                            InterpreterErrorMessage {
+                                error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
+                                statement: Some(statement)
+                            }
+                        ),
+                        (x, _) => Err(
+                            InterpreterErrorMessage {
+                                error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
+                                statement: Some(statement)
+                            }
+                        )
+                    };
+
+                    let (left, right) = evaled?;
+
+                    let res = match operator {
+                        ast::BinOperator::ListConcat => {
+                            left.borrow().iter().chain(right.borrow().iter()).cloned().collect()
+                        },
+                        _ => unreachable!("This should never be reached")
+                    };
+
+                    return Ok(ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(res))});
+                }            
             }
         },
         ast::Expression::UnaryOperation { operator, expression } => {
@@ -193,6 +226,24 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                     };
 
                     return Ok(ast::Expression::BoolLiteral(res));
+                },
+                ast::UnOperator::Length => {
+                    let evaled = match expression {
+                        ast::Expression::ListReference { elements_ref } => Ok(elements_ref),
+                        x => Err(
+                            InterpreterErrorMessage {
+                                error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
+                                statement: Some(statement)
+                            }
+                        )
+                    }?;
+
+                    let res = match operator {
+                        ast::UnOperator::Length => evaled.borrow().len() as i64,
+                        _ => unreachable!("This should never be reached")
+                    };
+
+                    return Ok(ast::Expression::IntLiteral(res));
                 }
             }
         },
@@ -223,11 +274,18 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             let values: Vec<ast::Expression> = values?;
             Ok(ast::Expression::Tuple { elements: values })
         },
+        ast::Expression::ListReference { elements_ref } => {
+            let values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
+                = elements_ref.borrow().iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
+            let values: Vec<ast::Expression> = values?;
+            Ok(ast::Expression::ListReference { elements_ref: Rc::new(RefCell::new(values)) })
+        },
         ast::Expression::Indexing { indexed, indexer } => {
             let original_indexed = eval_expression(state, indexed, statement.clone(), program)?;
 
             let indexed = match original_indexed {
                 ast::Expression::Tuple { ref elements } => elements,
+                ast::Expression::ListReference { ref elements_ref } => &elements_ref.borrow(),
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
                     statement: Some(statement)
@@ -337,7 +395,44 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             Ok(None)
         },
         ast::Statement::IndexAssignment { variable, index, value } => {
-            todo!()
+            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
+
+            let indexed = match original_indexed {
+                ast::Expression::ListReference { ref elements_ref } => elements_ref,
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
+                    statement: Some(stmt_ref)
+                })
+            };
+
+            let indexer = eval_expression(state, &index, stmt_ref.clone(), program)?;
+
+            let mut indexer = match indexer {
+                ast::Expression::IntLiteral(i) => i,
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                    statement: Some(stmt_ref)
+                })
+            };
+
+            if indexer < 0 {
+                indexer = (indexed.borrow().len() as i64) - 1 - indexer;
+            }
+
+            let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
+
+            let indexer = indexer as usize;
+
+            indexed
+                .borrow_mut()
+                .get_mut(indexer)
+                .ok_or_else(|| InterpreterErrorMessage {
+                    error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
+                    statement: Some(stmt_ref)
+                })
+                .map(|element| *element = value)?;
+
+            Ok(None)
         }
     };
 

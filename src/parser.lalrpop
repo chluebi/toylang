@@ -1,4 +1,6 @@
 use std::str::FromStr;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::ast;
@@ -103,6 +105,13 @@ Statement: ast::Statement = {
             expression: e
         }
     },
+    <variable:Ident> "[" <index:Expression> "]" "=" <value:Expression> => {
+        ast::Statement::IndexAssignment {
+            variable: variable,
+            index: index,
+            value: value
+        }
+    },
     "return" <e:Expression> => {
         ast::Statement::Return {
             expression: e
@@ -115,6 +124,8 @@ Expression: ast::Expression = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="left")]
+    "tuple(" <elts: CommaSeperatedExpressions> ")" => ast::Expression::Tuple {elements: elts},
+    "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(elts))},
     <indexed: Expression> "[" <indexer: Expression> "]" => ast::Expression::Indexing {
         indexed: Box::new(indexed), indexer: Box::new(indexer)
     },
@@ -134,6 +145,12 @@ Expression: ast::Expression = {
     "~" <e:Term> => {
         ast::Expression::UnaryOperation {
             operator: ast::UnOperator::Not,
+            expression: Box::new(e),
+        }
+    },
+    "?" <e:Term> => {
+        ast::Expression::UnaryOperation {
+            operator: ast::UnOperator::Length,
             expression: Box::new(e),
         }
     },
@@ -175,6 +192,14 @@ Expression: ast::Expression = {
         }
     },
     #[precedence(level="5")] #[assoc(side="left")]
+    <l:Expression> "++" <r:Expression> => {
+        ast::Expression::BinaryOperation {
+            operator: ast::BinOperator::ListConcat,
+            left: Box::new(l),
+            right: Box::new(r)
+        }
+    },
+    #[precedence(level="6")] #[assoc(side="left")]
     <l:Expression> "&&" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::And,
@@ -182,7 +207,7 @@ Expression: ast::Expression = {
             right: Box::new(r)
         }
     },
-    #[precedence(level="6")] #[assoc(side="left")]
+    #[precedence(level="7")] #[assoc(side="left")]
     <l:Expression> "||" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Or,
@@ -190,7 +215,7 @@ Expression: ast::Expression = {
             right: Box::new(r)
         }
     },
-    #[precedence(level="7")] #[assoc(side="left")]
+    #[precedence(level="8")] #[assoc(side="left")]
     <l:Expression> "==" <r:Expression> => {
         ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Eq,
@@ -241,8 +266,7 @@ Term: ast::Expression = {
     "false" => ast::Expression::BoolLiteral(false),
     <n:Num> => ast::Expression::IntLiteral(n),
     <id: Ident> => ast::Expression::Variable(id),
-    "(" <e: Expression> ")" => e,
-    "tuple(" <elts: CommaSeperatedExpressions> ")" => ast::Expression::Tuple {elements: elts}
+    "(" <e: Expression> ")" => e
 }
 
 
