@@ -76,6 +76,13 @@ pub enum Expression {
     FunctionCall {
         function_name: String,
         arguments: Vec<Expression>
+    },
+    Tuple {
+        elements: Vec<Expression>
+    },
+    Indexing {
+        indexed: Box<Expression>,
+        indexer: Box<Expression>
     }
 }
 
@@ -101,6 +108,19 @@ impl fmt::Display for Expression {
                     write!(f, "{}", arg)?;
                 }
                 write!(f, ")")
+            },
+            Expression::Tuple {elements} => {
+                write!(f, "(")?;
+                for (i, elt) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elt)?;
+                }
+                write!(f, ")")
+            },
+            Expression::Indexing { indexed, indexer } => {
+                write!(f, "{}[{}]", indexed, indexer)
             }
         }
     }
@@ -111,6 +131,11 @@ pub enum Statement {
     Assignment {
         variable: String,
         expression: Expression,
+    },
+    IndexAssignment {
+        variable: String,
+        index: Expression,
+        value: Expression
     },
     Return {
         expression: Expression
@@ -130,6 +155,7 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Statement::Assignment { variable, expression } => write!(f, "{} = {}", variable, expression),
+            Statement::IndexAssignment { variable, index, value } => write!(f, "{}[{}] = {}", variable, index, value),
             Statement::Return { expression } => write!(f, "return {}", expression),
             Statement::IfElse { condition, if_body, else_body } => {
                 write!(f, "if ({}) {{\n{}\n}} else {{\n{}\n}}", condition, if_body, else_body)

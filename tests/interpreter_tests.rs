@@ -63,4 +63,16 @@ mod tests {
             _ => assert!(false)
         }
     }
+
+    #[test]
+    fn tuples() {
+        let program_text = read_file("programs/tuples").unwrap();
+        let program = parser::GrammarParser::new().parse(&program_text);
+        let res = interpreter::interpret(&program.unwrap()).unwrap();
+
+        match res {
+            ast::Expression::IntLiteral(4950) => assert!(true),
+            _ => assert!(false)
+        }
+    }
 }

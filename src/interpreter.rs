@@ -25,14 +25,18 @@ impl fmt::Display for InterpreterState {
 #[derive(Debug)]
 enum InterpreterError {
     Panic(String),
-    VariableNotFound(String)
+    InvalidType(ast::Expression, String, String),
+    VariableNotFound(String),
+    IndexOutofBounds(ast::Expression, usize)
 }
 
 impl fmt::Display for InterpreterError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InterpreterError::Panic(err) => write!(f, "Interpreter Panic: {}", err),
-            InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var)
+            InterpreterError::InvalidType(expr, expected_type, comment) => write!(f, "Using {} operation on {}: {}", expected_type, expr, comment),
+            InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var),
+            InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", expr, index),
         }
     }
 }
@@ -89,13 +93,13 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         (ast::Expression::IntLiteral(left), ast::Expression::IntLiteral(right)) => Ok((left, right)),
                         (ast::Expression::IntLiteral(_), x) => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Int Operation on non-int: {}", x)),
+                                error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         ),
                         (x, _) => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Int Operation on non-int: {}", x)),
+                                error:InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         )
@@ -126,13 +130,13 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         (ast::Expression::BoolLiteral(left), ast::Expression::BoolLiteral(right)) => Ok((left, right)),
                         (ast::Expression::BoolLiteral(_), x) => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Bool Operation on non-bool: {}", x)),
+                                error: InterpreterError::InvalidType(x, "bool".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         ),
                         (x, _) => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Bool Operation on non-bool: {}", x)),
+                                error: InterpreterError::InvalidType(x, "bool".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         )
@@ -159,7 +163,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         ast::Expression::IntLiteral(expression) => Ok(expression),
                         x => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Int Operation on non-int: {}", x)),
+                                error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         )
@@ -177,7 +181,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         ast::Expression::BoolLiteral(expression) => Ok(expression),
                         x => Err(
                             InterpreterErrorMessage {
-                                error: InterpreterError::Panic(format!("Using Bool Operation on non-bool: {}", x)),
+                                error: InterpreterError::InvalidType(x, "bool".to_string(), "".to_string()),
                                 statement: Some(statement)
                             }
                         )
@@ -212,6 +216,46 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             state.return_value = None;
 
             interpret_function_body(state, function, function_name, program)
+        },
+        ast::Expression::Tuple { elements } => {
+            let values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
+                = elements.iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
+            let values: Vec<ast::Expression> = values?;
+            Ok(ast::Expression::Tuple { elements: values })
+        },
+        ast::Expression::Indexing { indexed, indexer } => {
+            let original_indexed = eval_expression(state, indexed, statement.clone(), program)?;
+
+            let indexed = match original_indexed {
+                ast::Expression::Tuple { ref elements } => elements,
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
+                    statement: Some(statement)
+                })
+            };
+
+            let indexer = eval_expression(state, indexer, statement.clone(), program)?;
+
+            let mut indexer = match indexer {
+                ast::Expression::IntLiteral(i) => i,
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                    statement: Some(statement)
+                })
+            };
+
+            if indexer < 0 {
+                indexer = (indexed.len() as i64) - 1 - indexer;
+            }
+
+            let indexer = indexer as usize;
+
+            indexed.get(indexer)
+                .map(|value| value.clone())
+                .ok_or_else(|| InterpreterErrorMessage {
+                    error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
+                    statement: Some(statement)
+                })
         }
     }
 }
@@ -291,6 +335,9 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
 
 
             Ok(None)
+        },
+        ast::Statement::IndexAssignment { variable, index, value } => {
+            todo!()
         }
     };
 

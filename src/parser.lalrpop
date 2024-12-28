@@ -115,7 +115,10 @@ Expression: ast::Expression = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="left")]
-    <id:Ident> "(" <args:CallArgs> ")" => {
+    <indexed: Expression> "[" <indexer: Expression> "]" => ast::Expression::Indexing {
+        indexed: Box::new(indexed), indexer: Box::new(indexer)
+    },
+    <id:Ident> "(" <args:CommaSeperatedExpressions> ")" => {
         ast::Expression::FunctionCall {
             function_name: id,
             arguments: args
@@ -238,17 +241,18 @@ Term: ast::Expression = {
     "false" => ast::Expression::BoolLiteral(false),
     <n:Num> => ast::Expression::IntLiteral(n),
     <id: Ident> => ast::Expression::Variable(id),
-    "(" <e: Expression> ")" => e
+    "(" <e: Expression> ")" => e,
+    "tuple(" <elts: CommaSeperatedExpressions> ")" => ast::Expression::Tuple {elements: elts}
 }
 
 
-CallArgs: Vec<ast::Expression> = {
-    <arg:Expression> "," <args:CallArgs> => {
-        let mut args = args;
-        args.insert(0, arg);
-        args
+CommaSeperatedExpressions: Vec<ast::Expression> = {
+    <exp:Expression> "," <exps:CommaSeperatedExpressions> => {
+        let mut exps = exps;
+        exps.insert(0, exp);
+        exps
     },
-    <arg:Expression> => vec![arg],
+    <exp:Expression> => vec![exp],
     => vec![]
 }
 
