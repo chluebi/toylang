@@ -112,6 +112,12 @@ Statement: ast::Statement = {
             value: value
         }
     },
+    <variable:Ident> "[" "]" "=" <value:Expression> => {
+        ast::Statement::ListAppend {
+            variable: variable,
+            value: value
+        }
+    },
     "return" <e:Expression> => {
         ast::Statement::Return {
             expression: e

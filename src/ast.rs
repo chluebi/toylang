@@ -182,6 +182,10 @@ pub enum Statement {
         index: Expression,
         value: Expression
     },
+    ListAppend {
+        variable: String,
+        value: Expression
+    },
     Return {
         expression: Expression
     },
@@ -201,6 +205,7 @@ impl fmt::Display for Statement {
         match self {
             Statement::Assignment { variable, expression } => write!(f, "{} = {}", variable, expression),
             Statement::IndexAssignment { variable, index, value } => write!(f, "{}[{}] = {}", variable, index, value),
+            Statement::ListAppend { variable, value } => write!(f, "{}[] = {}", variable, value),
             Statement::Return { expression } => write!(f, "return {}", expression),
             Statement::IfElse { condition, if_body, else_body } => {
                 write!(f, "if ({}) {{\n{}\n}} else {{\n{}\n}}", condition, if_body, else_body)

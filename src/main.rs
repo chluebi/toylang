@@ -16,7 +16,7 @@ fn read_file(file_path: &str) -> io::Result<String> {
 }
 
 pub fn main() {
-    let program_text = read_file("programs/treesum").unwrap();
+    let program_text = read_file("programs/powerset").unwrap();
     let program = parser::GrammarParser::new().parse(&program_text);
     match interpreter::interpret(&program.unwrap()) {
         Ok(v) => println!("Program Executed with result {}", v),

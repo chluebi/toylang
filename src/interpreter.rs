@@ -102,10 +102,6 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                 => {
                     let evaled = match (left.clone(), right) {
                         (ast::Expression::IntLiteral(left), ast::Expression::IntLiteral(right)) => Ok((left, right)),
-                        (ast::Expression::ListReference { elements_ref }, x) => {
-                            elements_ref.borrow_mut().push(x);
-                            return Ok(left.clone());
-                        },
                         (ast::Expression::IntLiteral(_), x) => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
@@ -441,6 +437,25 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                     statement: Some(stmt_ref)
                 })
                 .map(|element| *element = value)?;
+
+            Ok(None)
+        },
+        ast::Statement::ListAppend { variable, value } => {
+            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
+
+            let indexed = match original_indexed {
+                ast::Expression::ListReference { ref elements_ref } => elements_ref,
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
+                    statement: Some(stmt_ref)
+                })
+            };
+
+            let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
+
+            indexed
+                .borrow_mut()
+                .push(value);
 
             Ok(None)
         }

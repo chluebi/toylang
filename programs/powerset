@@ -8,13 +8,14 @@ powerset(l, i) {
 
         j = 0;
         while (j < ?without) {
-            with = with + (without[j] ++ []);
+            with[] = (without[j] ++ []);
             j = j + 1;
         }
 
         j = 0;
         while (j < ?with) {
-            with[j] = with[j] + l[i];
+            current = with[j];
+            current[] = l[i];
             j = j + 1;
         }
 

@@ -3,7 +3,7 @@ main() {
     a = [];
     i = 0;
     while (i < 100) {
-        a = a + i;
+        a[] = i;
         i = i + 1;
     }
 

@@ -101,6 +101,24 @@ mod tests {
     }
 
     #[test]
+    fn powerset() {
+        let program_text = read_file("programs/powerset").unwrap();
+        let program = parser::GrammarParser::new().parse(&program_text);
+        interpreter::interpret(&program.unwrap()).unwrap();
+
+        assert!(true)
+    }
+
+    #[test]
+    fn typecheck() {
+        let program_text = read_file("programs/typecheck").unwrap();
+        let program = parser::GrammarParser::new().parse(&program_text);
+        interpreter::interpret(&program.unwrap()).unwrap();
+
+        assert!(true)
+    }
+
+    #[test]
     fn treesum() {
         let program_text = read_file("programs/treesum").unwrap();
         let program = parser::GrammarParser::new().parse(&program_text);
