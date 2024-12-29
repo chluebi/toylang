@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
 use std::fmt;
 
 use crate::ast;
@@ -28,7 +29,9 @@ enum InterpreterError {
     Panic(String),
     InvalidType(ast::Expression, String, String),
     VariableNotFound(String),
-    IndexOutofBounds(ast::Expression, usize)
+    IndexOutofBounds(ast::Expression, usize),
+    IndexNotInDict(ast::Expression, ast::Expression),
+    Unhashable(ast::Expression)
 }
 
 impl fmt::Display for InterpreterError {
@@ -38,6 +41,8 @@ impl fmt::Display for InterpreterError {
             InterpreterError::InvalidType(expr, expected_type, comment) => write!(f, "Using {} operation on {}: {}", expected_type, expr, comment),
             InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var),
             InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", index, expr),
+            InterpreterError::IndexNotInDict(expr, index) => write!(f, "Index of {} is not in {}", index, expr),
+            InterpreterError::Unhashable(expr) => write!(f, "Expression {} is unhashable", expr)
         }
     }
 }
@@ -58,6 +63,36 @@ impl fmt::Display for InterpreterErrorMessage {
 }
 
 impl std::error::Error for InterpreterErrorMessage {}
+
+
+impl Hash for ast::Expression {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state); // Hash the enum variant
+
+        match self {
+            ast::Expression::IntLiteral(i) => i.hash(state),
+            ast::Expression::BoolLiteral(b) => b.hash(state),
+            ast::Expression::Tuple { elements } => {
+                for el in elements {
+                    el.hash(state);
+                }
+            },
+            ast::Expression::ListReference { elements_ref } => {
+                for el in elements_ref.borrow().iter() {
+                    el.hash(state);
+                }
+            },
+            ast::Expression::DictionaryReference { index_ref } => {
+                for (key, value) in index_ref.borrow().iter() {
+                    key.hash(state);
+                    value.hash(state);
+                }
+            },
+            _ => unreachable!("Hashing unhashable expression!")
+        }
+    }
+}
+
 
 
 pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
@@ -286,19 +321,55 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             let values: Vec<ast::Expression> = values?;
             Ok(ast::Expression::ListReference { elements_ref: Rc::new(RefCell::new(values)) })
         },
+        ast::Expression::DictionaryReference { index_ref: _ } => {
+            Ok(expression.clone()) // dictionary references should always already be fully evaluated
+        },
+        ast::Expression::DictionaryInitialisation { elements } => {
+            let mut map: HashMap<ast::Expression, ast::Expression> = HashMap::new();
+
+            for (key, value) in elements {
+                let key = eval_expression(state, key, statement.clone(), program)?;
+                let value = eval_expression(state, value, statement.clone(), program)?;
+
+                match key {
+                    ast::Expression::IntLiteral(_)
+                    | ast::Expression::BoolLiteral(_)
+                    | ast::Expression::Tuple { elements: _ }
+                    | ast::Expression::ListReference { elements_ref: _ }
+                    | ast::Expression::DictionaryReference { index_ref: _ } => (),
+                    _ => return Err(InterpreterErrorMessage {
+                        error: InterpreterError::Unhashable(key),
+                        statement: Some(statement.clone())
+                    })
+                }
+
+                map.insert(key, value);
+            }
+
+            Ok(ast::Expression::DictionaryReference { index_ref: Rc::new(RefCell::new(map)) })
+        },
         ast::Expression::Indexing { indexed, indexer } => {
             let original_indexed = eval_expression(state, indexed, statement.clone(), program)?;
+            let indexer = eval_expression(state, indexer, statement.clone(), program)?;
 
             let indexed = match original_indexed {
                 ast::Expression::Tuple { ref elements } => elements,
                 ast::Expression::ListReference { ref elements_ref } => &elements_ref.borrow(),
+                ast::Expression::DictionaryReference { ref index_ref } => {
+                    match index_ref.borrow().get(&indexer) {
+                        Some(x) => return Ok(x.clone()),
+                        _ => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::IndexNotInDict(original_indexed.clone(), indexer),
+                            statement: Some(statement.clone())
+                        })
+                    };
+                },
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples, lists and dictionaries can be indexed".to_string()),
                     statement: Some(statement)
                 })
             };
-
-            let indexer = eval_expression(state, indexer, statement.clone(), program)?;
+            
 
             let mut indexer = match indexer {
                 ast::Expression::IntLiteral(i) => i,
@@ -320,7 +391,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                     error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
                     statement: Some(statement)
                 })
-        }
+        },
     }
 }
 
@@ -401,44 +472,50 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             Ok(None)
         },
         ast::Statement::IndexAssignment { variable, index, value } => {
-            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
-
-            let indexed = match original_indexed {
-                ast::Expression::ListReference { ref elements_ref } => elements_ref,
-                x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
-                    statement: Some(stmt_ref)
-                })
-            };
-
             let indexer = eval_expression(state, &index, stmt_ref.clone(), program)?;
 
-            let mut indexer = match indexer {
-                ast::Expression::IntLiteral(i) => i,
+            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
+
+            match original_indexed {
+                ast::Expression::ListReference { elements_ref: ref indexed } => {
+                    let mut indexer = match indexer {
+                        ast::Expression::IntLiteral(i) => i,
+                        x => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                            statement: Some(stmt_ref)
+                        })
+                    };
+
+                    if indexer < 0 {
+                        indexer = (indexed.borrow().len() as i64) - 1 - indexer;
+                    }
+
+                    let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
+
+                    let indexer = indexer as usize;
+
+                    indexed
+                        .borrow_mut()
+                        .get_mut(indexer)
+                        .ok_or_else(|| InterpreterErrorMessage {
+                            error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
+                            statement: Some(stmt_ref)
+                        })
+                        .map(|element| *element = value)?;
+
+                    Ok(None)
+                },
+                ast::Expression::DictionaryReference { index_ref: ref indexed } => {
+                    let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
+                    indexed.borrow_mut().insert(indexer, value);
+
+                    Ok(None)
+                },
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
                     statement: Some(stmt_ref)
                 })
-            };
-
-            if indexer < 0 {
-                indexer = (indexed.borrow().len() as i64) - 1 - indexer;
             }
-
-            let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
-
-            let indexer = indexer as usize;
-
-            indexed
-                .borrow_mut()
-                .get_mut(indexer)
-                .ok_or_else(|| InterpreterErrorMessage {
-                    error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
-                    statement: Some(stmt_ref)
-                })
-                .map(|element| *element = value)?;
-
-            Ok(None)
         },
         ast::Statement::ListAppend { variable, value } => {
             let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
@@ -446,7 +523,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             let indexed = match original_indexed {
                 ast::Expression::ListReference { ref elements_ref } => elements_ref,
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples can be indexed".to_string()),
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists can be empty-indexed".to_string()),
                     statement: Some(stmt_ref)
                 })
             };

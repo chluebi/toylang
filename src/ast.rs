@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Type {
     Int,
     Bool,
@@ -22,7 +22,7 @@ impl fmt::Display for Type {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BinOperator {
     Add,
     Sub,
@@ -67,7 +67,7 @@ impl fmt::Display for BinOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum UnOperator {
     Neg,
     Not,
@@ -85,7 +85,7 @@ impl fmt::Display for UnOperator {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
@@ -112,6 +112,12 @@ pub enum Expression {
     },
     ListReference {
         elements_ref: Rc<RefCell<Vec<Expression>>>
+    },
+    DictionaryInitialisation {
+        elements: Vec<(Expression, Expression)>
+    },
+    DictionaryReference {
+        index_ref: Rc<RefCell<HashMap<Expression,Expression>>>
     },
     Indexing {
         indexed: Box<Expression>,
@@ -163,6 +169,26 @@ impl fmt::Display for Expression {
                     write!(f, "{}", elt)?;
                 }
                 write!(f, "]")
+            },
+            Expression::DictionaryReference { index_ref } => {
+                write!(f, "{{")?;
+                for (i, (key, value)) in index_ref.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", key, value)?;
+                }
+                write!(f, "}}")
+            },
+            Expression::DictionaryInitialisation { elements } => {
+                write!(f, "{{")?;
+                for (i, (key, value)) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", key, value)?;
+                }
+                write!(f, "}}")
             },
             Expression::Indexing { indexed, indexer } => {
                 write!(f, "{}[{}]", indexed, indexer)
