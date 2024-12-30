@@ -115,6 +115,68 @@ Statement: ast::Statement = {
         ast::Statement::Return {
             expression: e
         }
+    },
+
+    <t:LHSExpression> "+=" <e:Expression> => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Add,
+                left: Box::new(t),
+                right: Box::new(e)
+            }
+        }
+    },
+    <t:LHSExpression> "-=" <e:Expression> => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Sub,
+                left: Box::new(t),
+                right: Box::new(e)
+            }
+        }
+    },
+    <t:LHSExpression> "*=" <e:Expression> => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Mul,
+                left: Box::new(t),
+                right: Box::new(e)
+            }
+        }
+    },
+    <t:LHSExpression> "/=" <e:Expression> => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Div,
+                left: Box::new(t),
+                right: Box::new(e)
+            }
+        }
+    },
+
+    <t:LHSExpression> "++" => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Add,
+                left: Box::new(t),
+                right: Box::new(ast::Expression::IntLiteral(1))
+            }
+        }
+    },
+    <t:LHSExpression> "--" => {
+        ast::Statement::Assignment {
+            target: t.clone(),
+            expression: ast::Expression::BinaryOperation {
+                operator: ast::BinOperator::Sub,
+                left: Box::new(t),
+                right: Box::new(ast::Expression::IntLiteral(1))
+            }
+        }
     }
 };
 
