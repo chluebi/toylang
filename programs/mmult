@@ -1,38 +1,21 @@
 mmult(A, B) {
     C = [];
 
-    j = 0;
-    while (j < ?B) {
+    for (j = 0; j < ?B; j++) {
         C[] = [];
-
-        i = 0;
-        while (i < ?(A[0])) {
+        for (i = 0; i < ?(A[0]); i++) {
             C[-1][] = 0;
-
-            i++;
         }
-
-        j++;
     }
 
-    i = 0;
-    while (i < ?(A[0])) {
-        j = 0;
-        while (j < ?B) {
-            k = 0;
-
+    for (i = 0; i < ?(A[0]); i++) {
+        for (j = 0; j < ?B; j++) {
             s = 0;
-            while (k < ?A) {
+            for (k = 0; k < ?A; k++) {
                 s += A[k][i] * B[j][k];
-
-                k++;
             }
             C[j][i] = s;
-
-
-            j++;
-        }
-        i++;
+        }        
     }
 
     return C;

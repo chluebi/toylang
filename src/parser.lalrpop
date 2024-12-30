@@ -71,29 +71,43 @@ Statements: Vec<ast::Statement> = {
         stmts.insert(0, stmt);
         stmts
     },
-    <stmt:ControlFlow> <stmts:Statements> => {
-        let mut stmts = stmts;
-        stmts.insert(0, stmt);
-        stmts
+    <c_stmts:ControlFlow> <stmts:Statements> => {
+        let mut c_stmts = c_stmts;
+        c_stmts.extend(stmts);
+        c_stmts
     },
     <stmt:Statement> => vec![stmt],
     => vec![]
 };
 
 
-ControlFlow: ast::Statement = {
-    "if (" <c:Expression> ")" "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
-        ast::Statement::IfElse {
+ControlFlow: Vec<ast::Statement> = {
+    "if" <c:Expression> "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
+        vec![ast::Statement::IfElse {
             condition: c,
             if_body: if_body,
             else_body: else_body
-        }
+        }]
     },
-    "while" "(" <c:Expression> ")" "{" <b:Body> "}" => {
-        ast::Statement::While {
+    "while" <c:Expression> "{" <b:Body> "}" => {
+        vec![ast::Statement::While {
             condition: c,
             body: b
-        }
+        }]
+    },
+    "for" "(" <start:Statement> ";" <c:Expression> ";" <step:Statements> ")" "{" <body:Statements> "}" => {
+        let mut stmts = vec![start];
+        let mut body = body;
+        body.extend(step);
+        stmts.push(
+            ast::Statement::While {
+                condition: c,
+                body: ast::Body {
+                    statements: body
+                }
+            }
+        );
+        stmts
     }
 }
 

@@ -141,4 +141,16 @@ mod tests {
             _ => assert!(false)
         }
     }
+
+    #[test]
+    fn forloop() {
+        let program_text = read_file("programs/forloop").unwrap();
+        let program = parser::GrammarParser::new().parse(&program_text);
+        let res = interpreter::interpret(&program.unwrap()).unwrap();
+
+        match res {
+            ast::Expression::IntLiteral(2047) => assert!(true),
+            _ => assert!(false)
+        }
+    }
 }
