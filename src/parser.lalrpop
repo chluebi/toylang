@@ -133,7 +133,7 @@ Expression: ast::Expression = {
     "tuple(" <elts: CommaSeperatedExpressions> ")" => ast::Expression::Tuple {elements: elts},
     "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(elts))},
     "{" <elts: CommaSeperatedMappings> "}" => ast::Expression::DictionaryInitialisation {elements: elts},
-    <indexed: Expression> "[" <indexer: Expression> "]" => ast::Expression::Indexing {
+    <indexed: Expression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
         indexed: Box::new(indexed), indexer: Box::new(indexer)
     },
     <id:Ident> "(" <args:CommaSeperatedExpressions> ")" => {
@@ -271,7 +271,11 @@ Expression: ast::Expression = {
             left: Box::new(l),
             right: Box::new(r)
         }
-    }
+    },
+}
+
+IndexExpression: ast::Expression = {
+    Expression
 }
 
 
