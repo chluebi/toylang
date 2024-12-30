@@ -1,13 +1,13 @@
 
 make_tuple(a, b) {
-    return tuple(a, b);
+    return (a, b);
 }
 
 main() {
     i = 0;
     x = i;
     while (i < 100) {
-        x = tuple(x, i);
+        x = (x, i);
         i = i + 1;
     }
 

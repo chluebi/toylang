@@ -130,7 +130,11 @@ Expression: ast::Expression = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="left")]
-    "tuple(" <elts: CommaSeperatedExpressions> ")" => ast::Expression::Tuple {elements: elts},
+    "(" <e:Expression> "," <elts: CommaSeperatedExpressions> ")" => {
+        let mut elts = elts;
+        elts.insert(0, e);
+        return ast::Expression::Tuple {elements: elts};
+    },
     "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(elts))},
     "{" <elts: CommaSeperatedMappings> "}" => ast::Expression::DictionaryInitialisation {elements: elts},
     <indexed: Expression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
