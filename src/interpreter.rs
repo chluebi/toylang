@@ -398,10 +398,74 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
 pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
     let stmt_ref = Rc::new(stmt.clone());
     let eval = match stmt {
-        ast::Statement::Assignment {variable, expression} => {
-            let v = eval_expression(state, &expression, stmt_ref, program)?;
-            state.values.entry(variable).and_modify(|value| *value = v.clone()).or_insert(v);
-            Ok(None)
+        ast::Statement::Assignment {target, expression} => {
+            match target {
+                ast::Expression::Variable(variable) => {
+                    let v = eval_expression(state, &expression, stmt_ref, program)?;
+                    state.values.entry(variable).and_modify(|value| *value = v.clone()).or_insert(v);
+                    Ok(None)
+                },
+                ast::Expression::Indexing { indexed, indexer } => {
+                    let indexer = eval_expression(state, &indexer, stmt_ref.clone(), program)?;
+
+                   
+                    let original_indexed =  match *indexed {
+                        ast::Expression::Variable(_)
+                        | ast::Expression::Indexing { .. } => {
+                            eval_expression(state, &indexed, stmt_ref.clone(), program)?
+                        }
+                        x => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                            statement: Some(stmt_ref)
+                        })
+                    };
+
+                    match original_indexed {
+                        ast::Expression::ListReference { elements_ref: ref indexed } => {
+                            let mut indexer = match indexer {
+                                ast::Expression::IntLiteral(i) => i,
+                                x => return Err(InterpreterErrorMessage {
+                                    error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                                    statement: Some(stmt_ref)
+                                })
+                            };
+
+                            if indexer < 0 {
+                                indexer = (indexed.borrow().len() as i64) - 1 - indexer;
+                            }
+
+                            let value = eval_expression(state, &expression, stmt_ref.clone(), program)?;
+
+                            let indexer = indexer as usize;
+
+                            indexed
+                                .borrow_mut()
+                                .get_mut(indexer)
+                                .ok_or_else(|| InterpreterErrorMessage {
+                                    error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
+                                    statement: Some(stmt_ref)
+                                })
+                                .map(|element| *element = value)?;
+
+                            Ok(None)
+                        },
+                        ast::Expression::DictionaryReference { index_ref: ref indexed } => {
+                            let value = eval_expression(state, &expression, stmt_ref.clone(), program)?;
+                            indexed.borrow_mut().insert(indexer, value);
+
+                            Ok(None)
+                        },
+                        x => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                            statement: Some(stmt_ref)
+                        })
+                    }
+                },
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                    statement: Some(stmt_ref)
+                })
+            }
         },
         ast::Statement::Return { expression } => {
             match eval_expression(state, &expression, stmt_ref.clone(), program) {
@@ -471,54 +535,17 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
 
             Ok(None)
         },
-        ast::Statement::IndexAssignment { variable, index, value } => {
-            let indexer = eval_expression(state, &index, stmt_ref.clone(), program)?;
-
-            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
-
-            match original_indexed {
-                ast::Expression::ListReference { elements_ref: ref indexed } => {
-                    let mut indexer = match indexer {
-                        ast::Expression::IntLiteral(i) => i,
-                        x => return Err(InterpreterErrorMessage {
-                            error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
-                            statement: Some(stmt_ref)
-                        })
-                    };
-
-                    if indexer < 0 {
-                        indexer = (indexed.borrow().len() as i64) - 1 - indexer;
-                    }
-
-                    let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
-
-                    let indexer = indexer as usize;
-
-                    indexed
-                        .borrow_mut()
-                        .get_mut(indexer)
-                        .ok_or_else(|| InterpreterErrorMessage {
-                            error: InterpreterError::IndexOutofBounds(original_indexed.clone(), indexer),
-                            statement: Some(stmt_ref)
-                        })
-                        .map(|element| *element = value)?;
-
-                    Ok(None)
-                },
-                ast::Expression::DictionaryReference { index_ref: ref indexed } => {
-                    let value = eval_expression(state, &value, stmt_ref.clone(), program)?;
-                    indexed.borrow_mut().insert(indexer, value);
-
-                    Ok(None)
-                },
+        ast::Statement::ListAppend { target, value } => {
+            let original_indexed =  match target {
+                ast::Expression::Variable(_)
+                | ast::Expression::Indexing { .. } => {
+                    eval_expression(state, &target, stmt_ref.clone(), program)?
+                }
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
                     statement: Some(stmt_ref)
                 })
-            }
-        },
-        ast::Statement::ListAppend { variable, value } => {
-            let original_indexed = eval_expression(state, &ast::Expression::Variable(variable), stmt_ref.clone(), program)?;
+            };
 
             let indexed = match original_indexed {
                 ast::Expression::ListReference { ref elements_ref } => elements_ref,

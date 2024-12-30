@@ -99,22 +99,15 @@ ControlFlow: ast::Statement = {
 
 
 Statement: ast::Statement = {
-    <i:Ident> "=" <e:Expression> => {
+    <t:LHSExpression> "=" <e:Expression> => {
         ast::Statement::Assignment {
-            variable: i,
+            target: t,
             expression: e
         }
     },
-    <variable:Ident> "[" <index:Expression> "]" "=" <value:Expression> => {
-        ast::Statement::IndexAssignment {
-            variable: variable,
-            index: index,
-            value: value
-        }
-    },
-    <variable:Ident> "[" "]" "=" <value:Expression> => {
+    <t:LHSExpression> "[" "]" "=" <value:Expression> => {
         ast::Statement::ListAppend {
-            variable: variable,
+            target: t,
             value: value
         }
     },
@@ -122,6 +115,13 @@ Statement: ast::Statement = {
         ast::Statement::Return {
             expression: e
         }
+    }
+};
+
+LHSExpression: ast::Expression = {
+    <id: Ident> => ast::Expression::Variable(id),
+    <indexed:LHSExpression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
+        indexed: Box::new(indexed), indexer: Box::new(indexer)
     }
 };
 

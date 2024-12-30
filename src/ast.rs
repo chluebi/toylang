@@ -200,16 +200,11 @@ impl fmt::Display for Expression {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Assignment {
-        variable: String,
+        target: Expression,
         expression: Expression,
     },
-    IndexAssignment {
-        variable: String,
-        index: Expression,
-        value: Expression
-    },
     ListAppend {
-        variable: String,
+        target: Expression,
         value: Expression
     },
     Return {
@@ -229,9 +224,8 @@ pub enum Statement {
 impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Statement::Assignment { variable, expression } => write!(f, "{} = {}", variable, expression),
-            Statement::IndexAssignment { variable, index, value } => write!(f, "{}[{}] = {}", variable, index, value),
-            Statement::ListAppend { variable, value } => write!(f, "{}[] = {}", variable, value),
+            Statement::Assignment { target, expression } => write!(f, "{} = {}", target, expression),
+            Statement::ListAppend { target, value } => write!(f, "{}[] = {}", target, value),
             Statement::Return { expression } => write!(f, "return {}", expression),
             Statement::IfElse { condition, if_body, else_body } => {
                 write!(f, "if ({}) {{\n{}\n}} else {{\n{}\n}}", condition, if_body, else_body)
