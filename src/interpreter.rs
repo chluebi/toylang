@@ -380,7 +380,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             };
 
             if indexer < 0 {
-                indexer = (indexed.len() as i64) - 1 - indexer;
+                indexer = (indexed.len() as i64) - 2 - indexer;
             }
 
             let indexer = indexer as usize;
@@ -431,7 +431,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                             };
 
                             if indexer < 0 {
-                                indexer = (indexed.borrow().len() as i64) - 1 - indexer;
+                                indexer = (indexed.borrow().len() as i64) - 2 - indexer;
                             }
 
                             let value = eval_expression(state, &expression, stmt_ref.clone(), program)?;
