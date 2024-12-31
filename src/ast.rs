@@ -91,34 +91,34 @@ pub enum Expression {
     BoolLiteral(bool),
     Variable(String),
     Typecheck {
-        expression: Box<Expression>,
+        expression: Box<LocExpression>,
         expected_type: Type
     },
     BinaryOperation {
         operator: BinOperator,
-        left: Box<Expression>,
-        right: Box<Expression>,
+        left: Box<LocExpression>,
+        right: Box<LocExpression>,
     },
     UnaryOperation {
         operator: UnOperator,
-        expression: Box<Expression>
+        expression: Box<LocExpression>
     },
     FunctionCall {
         function_name: String,
-        arguments: Vec<Expression>
+        arguments: Vec<LocExpression>
     },
     TupleDefinition {
-        elements: Vec<Expression>
+        elements: Vec<LocExpression>
     },
     ListDefinition {
-        elements: Vec<Expression>
+        elements: Vec<LocExpression>
     },
     DictionaryDefinition {
-        elements: Vec<(Expression, Expression)>
+        elements: Vec<(LocExpression, LocExpression)>
     },
     Indexing {
-        indexed: Box<Expression>,
-        indexer: Box<Expression>
+        indexed: Box<LocExpression>,
+        indexer: Box<LocExpression>
     }
 }
 
@@ -184,9 +184,10 @@ impl fmt::Display for Expression {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct LocExpression {
-    expression: Expression,
-    loc: Range<u64>
+    pub expression: Expression,
+    pub loc: Range<usize>
 }
 
 impl fmt::Display for LocExpression {
@@ -199,23 +200,23 @@ impl fmt::Display for LocExpression {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Assignment {
-        target: Expression,
-        expression: Expression,
+        target: LocExpression,
+        expression: LocExpression,
     },
     ListAppend {
-        target: Expression,
-        value: Expression
+        target: LocExpression,
+        value: LocExpression
     },
     Return {
-        expression: Expression
+        expression: LocExpression
     },
     IfElse {
-        condition: Expression,
+        condition: LocExpression,
         if_body: Body,
         else_body: Body
     },
     While {
-        condition: Expression,
+        condition: LocExpression,
         body: Body
     }
 }
@@ -237,8 +238,20 @@ impl fmt::Display for Statement {
 }
 
 #[derive(Debug, Clone)]
+pub struct LocStatement {
+    pub statement: Statement,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for LocStatement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.statement)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Body {
-    pub statements: Vec<Statement>
+    pub statements: Vec<LocStatement>
 }
 
 impl fmt::Display for Body {
@@ -255,22 +268,35 @@ impl fmt::Display for Body {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Argument {
+    pub name: String,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for Argument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub arguments: Vec<String>,
-    pub body: Body
+    pub arguments: Vec<Argument>,
+    pub body: Body,
+    pub loc: Range<usize>
 }
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
-        for (i, statement) in self.arguments.iter().enumerate() {
+        for (i, arg) in self.arguments.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{};", statement)?;
+            write!(f, "{};", arg)?;
         }
         write!(f, ") {{\n{}\n}}", self.body)?;
         Ok(())

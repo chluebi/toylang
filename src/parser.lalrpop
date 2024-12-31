@@ -28,17 +28,18 @@ Functions: HashMap<String, ast::Function> = {
 };
 
 Function: ast::Function = {
-    <name:Ident> "(" <args:Arguments> ")" "{" <body:Body> "}" => {
+    <start: @L> <name:Ident> "(" <args:Arguments> ")" <end: @R> "{" <body:Body> "}" => {
         ast::Function {
             name: name,
             arguments: args,
             body: body,
+            loc: start..end
         }
     }
 };
 
 
-Arguments: Vec<String> = {
+Arguments: Vec<ast::Argument> = {
     <arg:Argument> "," <args:Arguments> => {
         let mut args = args;
         args.insert(0, arg);
@@ -49,8 +50,11 @@ Arguments: Vec<String> = {
 };
 
 
-Argument: String = {
-    <i:Ident> => i,
+Argument: ast::Argument = {
+     <start: @L> <i:Ident> <end: @R> => ast::Argument{
+        name: i,
+        loc: start..end
+     },
 };
 
 
@@ -63,7 +67,7 @@ Body: ast::Body = {
 };
 
 
-Statements: Vec<ast::Statement> = {
+Statements: Vec<ast::LocStatement> = {
     <stmt:Statement> ";" <stmts:Statements> => {
         let mut stmts = stmts;
         stmts.insert(0, stmt);
@@ -79,30 +83,43 @@ Statements: Vec<ast::Statement> = {
 };
 
 
-ControlFlow: Vec<ast::Statement> = {
-    "if" <c:Expression> "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
-        vec![ast::Statement::IfElse {
-            condition: c,
-            if_body: if_body,
-            else_body: else_body
-        }]
+ControlFlow: Vec<ast::LocStatement> = {
+    <start: @L> "if" <c:Expression> <end: @R> "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
+        vec![
+            ast::LocStatement {
+                statement: ast::Statement::IfElse {
+                    condition: c,
+                    if_body: if_body,
+                    else_body: else_body
+                },
+                loc: start..end
+            }
+        ]
     },
-    "while" <c:Expression> "{" <b:Body> "}" => {
-        vec![ast::Statement::While {
-            condition: c,
-            body: b
-        }]
+    <start: @L> "while" <c:Expression> <end: @R>  "{" <b:Body> "}" => {
+        vec![
+            ast::LocStatement {
+                statement: ast::Statement::While {
+                    condition: c,
+                    body: b
+                },
+                loc: start..end
+            }
+        ]
     },
-    "for" "(" <start:Statement> ";" <c:Expression> ";" <step:Statements> ")" "{" <body:Statements> "}" => {
-        let mut stmts = vec![start];
+    <start: @L> "for" "(" <init:Statement> ";" <c:Expression> ";" <step:Statements> ")" <end: @R> "{" <body:Statements> "}" => {
+        let mut stmts = vec![init];
         let mut body = body;
         body.extend(step);
         stmts.push(
-            ast::Statement::While {
-                condition: c,
-                body: ast::Body {
-                    statements: body
-                }
+            ast::LocStatement {
+                statement: ast::Statement::While {
+                    condition: c,
+                    body: ast::Body {
+                        statements: body
+                    }
+                },
+                loc: start..end
             }
         );
         stmts
@@ -110,263 +127,362 @@ ControlFlow: Vec<ast::Statement> = {
 }
 
 
-Statement: ast::Statement = {
-    <t:LHSExpression> "=" <e:Expression> => {
-        ast::Statement::Assignment {
-            target: t,
-            expression: e
+Statement: ast::LocStatement = {
+    <start: @L> <t:LHSExpression> "=" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t,
+                expression: e
+            },
+            loc: start..end
         }
     },
-    <t:LHSExpression> "[" "]" "=" <value:Expression> => {
-        ast::Statement::ListAppend {
-            target: t,
-            value: value
+    <start: @L> <t:LHSExpression> "[" "]" "=" <value:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::ListAppend {
+                target: t,
+                value: value
+            },
+            loc: start..end
         }
     },
-    "return" <e:Expression> => {
-        ast::Statement::Return {
-            expression: e
-        }
-    },
-
-    <t:LHSExpression> "+=" <e:Expression> => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Add,
-                left: Box::new(t),
-                right: Box::new(e)
-            }
-        }
-    },
-    <t:LHSExpression> "-=" <e:Expression> => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Sub,
-                left: Box::new(t),
-                right: Box::new(e)
-            }
-        }
-    },
-    <t:LHSExpression> "*=" <e:Expression> => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Mul,
-                left: Box::new(t),
-                right: Box::new(e)
-            }
-        }
-    },
-    <t:LHSExpression> "/=" <e:Expression> => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Div,
-                left: Box::new(t),
-                right: Box::new(e)
-            }
+    <start: @L> "return" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Return {
+                expression: e
+            },
+            loc: start..end
         }
     },
 
-    <t:LHSExpression> "++" => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Add,
-                left: Box::new(t),
-                right: Box::new(ast::Expression::IntLiteral(1))
-            }
+    <start: @L> <t:LHSExpression> "+=" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Add,
+                        left: Box::new(t),
+                        right: Box::new(e)
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
         }
     },
-    <t:LHSExpression> "--" => {
-        ast::Statement::Assignment {
-            target: t.clone(),
-            expression: ast::Expression::BinaryOperation {
-                operator: ast::BinOperator::Sub,
-                left: Box::new(t),
-                right: Box::new(ast::Expression::IntLiteral(1))
-            }
+    <start: @L> <t:LHSExpression> "-=" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Sub,
+                        left: Box::new(t),
+                        right: Box::new(e)
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
+        }
+    },
+    <start: @L> <t:LHSExpression> "*=" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Mul,
+                        left: Box::new(t),
+                        right: Box::new(e)
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
+        }
+    },
+    <start: @L> <t:LHSExpression> "/=" <e:Expression> <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Div,
+                        left: Box::new(t),
+                        right: Box::new(e)
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
+        }
+    },
+
+    <start: @L> <t:LHSExpression> "++" <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Add,
+                        left: Box::new(t),
+                        right: Box::new(ast::LocExpression { 
+                            expression: ast::Expression::IntLiteral(1),
+                            loc: start..end
+                        })
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
+        }
+    },
+    <start: @L> <t:LHSExpression> "--" <end: @R> => {
+        ast::LocStatement {
+            statement: ast::Statement::Assignment {
+                target: t.clone(),
+                expression: ast::LocExpression {
+                    expression: ast::Expression::BinaryOperation {
+                        operator: ast::BinOperator::Sub,
+                        left: Box::new(t),
+                        right: Box::new(ast::LocExpression { 
+                            expression: ast::Expression::IntLiteral(1),
+                            loc: start..end
+                        })
+                    },
+                    loc: start..end
+                }
+            },
+            loc: start..end
         }
     }
 };
 
-LHSExpression: ast::Expression = {
-    <id: Ident> => ast::Expression::Variable(id),
-    <indexed:LHSExpression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
-        indexed: Box::new(indexed), indexer: Box::new(indexer)
+LHSExpression: ast::LocExpression = {
+    <start: @L> <id: Ident> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::Variable(id),
+        loc: start..end
+    },
+    <start: @L> <indexed:LHSExpression> "[" <indexer: IndexExpression> "]" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::Indexing {
+            indexed: Box::new(indexed), indexer: Box::new(indexer)
+        },
+        loc: start..end
     }
 };
 
 
-Expression: ast::Expression = {
+Expression: ast::LocExpression = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="left")]
-    "(" <e:Expression> "," <elts: CommaSeperatedExpressions> ")" => {
+    <start: @L> "(" <e:Expression> "," <elts: CommaSeperatedExpressions> ")" <end: @R> => {
         let mut elts = elts;
         elts.insert(0, e);
-        return ast::Expression::TupleDefinition {elements: elts};
+        return ast::LocExpression {
+            expression: ast::Expression::TupleDefinition {elements: elts},
+            loc: start..end
+        };
     },
-    "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListDefinition {elements: elts},
-    "{" <elts: CommaSeperatedMappings> "}" => ast::Expression::DictionaryDefinition {elements: elts},
-    <indexed: Expression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
-        indexed: Box::new(indexed), indexer: Box::new(indexer)
+    <start: @L> "[" <elts: CommaSeperatedExpressions> "]" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::ListDefinition {elements: elts},
+        loc: start..end
     },
-    <id:Ident> "(" <args:CommaSeperatedExpressions> ")" => {
-        ast::Expression::FunctionCall {
+    <start: @L> "{" <elts: CommaSeperatedMappings> "}" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::DictionaryDefinition {elements: elts},
+        loc: start..end
+    },
+    <start: @L> <indexed: Expression> "[" <indexer: IndexExpression> "]" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::Indexing {
+            indexed: Box::new(indexed), indexer: Box::new(indexer)
+        },
+        loc: start..end
+    },
+    <start: @L> <id:Ident> "(" <args:CommaSeperatedExpressions> ")" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::FunctionCall {
             function_name: id,
             arguments: args
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="2")] #[assoc(side="left")]
-    "-" <e:Term> => {
-        ast::Expression::UnaryOperation {
+    <start: @L> "-" <e:Term> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::UnaryOperation {
             operator: ast::UnOperator::Neg,
             expression: Box::new(e),
-        }
+        },
+        loc: start..end
     },
-    "!" <e:Term> => {
-        ast::Expression::UnaryOperation {
+    <start: @L> "!" <e:Term> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::UnaryOperation {
             operator: ast::UnOperator::Not,
             expression: Box::new(e),
-        }
+        },
+        loc: start..end
     },
-    "?" <e:Term> => {
-        ast::Expression::UnaryOperation {
+    <start: @L> "?" <e:Term> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::UnaryOperation {
             operator: ast::UnOperator::Length,
             expression: Box::new(e),
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="3")] #[assoc(side="left")]
-    <l:Expression> "*" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "*" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Mul,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "/" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "/" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Div,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "%" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "%" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Mod,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:Expression> "+" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "+" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Add,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "-" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "-" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Sub,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="5")] #[assoc(side="left")]
-    <l:Expression> "++" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "++" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::ListConcat,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="6")] #[assoc(side="left")]
-    <l:Expression> "??" <r:Type> => {
-        ast::Expression::Typecheck {
+    <start: @L> <l:Expression> "??" <r:Type> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::Typecheck {
             expression: Box::new(l),
             expected_type: r
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="7")] #[assoc(side="left")]
-    <l:Expression> "&&" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "&&" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::And,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="8")] #[assoc(side="left")]
-    <l:Expression> "||" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "||" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Or,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
     #[precedence(level="9")] #[assoc(side="left")]
-    <l:Expression> "==" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "==" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Eq,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "!=" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "!=" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Neq,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "<" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "<" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Lt,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> ">" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> ">" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Gt,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> "<=" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> "<=" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Leq,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
-    <l:Expression> ">=" <r:Expression> => {
-        ast::Expression::BinaryOperation {
+    <start: @L> <l:Expression> ">=" <r:Expression> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BinaryOperation {
             operator: ast::BinOperator::Geq,
             left: Box::new(l),
             right: Box::new(r)
-        }
+        },
+        loc: start..end
     },
 }
 
-IndexExpression: ast::Expression = {
+IndexExpression: ast::LocExpression = {
     Expression
 }
 
-
-Term: ast::Expression = {
-    "true" => ast::Expression::BoolLiteral(true),
-    "false" => ast::Expression::BoolLiteral(false),
-    <n:Num> => ast::Expression::IntLiteral(n),
-    <id: Ident> => ast::Expression::Variable(id),
+Term: ast::LocExpression = {
+    <start: @L> "true" <end: @R> => ast::LocExpression {
+        expression: ast::Expression::BoolLiteral(true),
+        loc: start..end
+    },
+    <start: @L> "false" <end: @R> => ast::LocExpression { 
+        expression: ast::Expression::BoolLiteral(false),
+        loc: start..end
+    },
+    <start: @L> <n:Num> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::IntLiteral(n),
+        loc: start..end
+    },
+    <start: @L> <id: Ident> <end: @R> => ast::LocExpression {
+        expression: ast::Expression::Variable(id),
+        loc: start..end
+    },
     "(" <e: Expression> ")" => e
 }
 
 
-CommaSeperatedExpressions: Vec<ast::Expression> = {
+CommaSeperatedExpressions: Vec<ast::LocExpression> = {
     <exp:Expression> "," <exps:CommaSeperatedExpressions> => {
         let mut exps = exps;
         exps.insert(0, exp);
@@ -376,7 +492,7 @@ CommaSeperatedExpressions: Vec<ast::Expression> = {
     => vec![]
 }
 
-CommaSeperatedMappings: Vec<(ast::Expression, ast::Expression)> = {
+CommaSeperatedMappings: Vec<(ast::LocExpression, ast::LocExpression)> = {
     <m:Mapping> "," <mappings:CommaSeperatedMappings> => {
         let mut mappings = mappings;
         mappings.insert(0, m);
@@ -386,7 +502,7 @@ CommaSeperatedMappings: Vec<(ast::Expression, ast::Expression)> = {
     => vec![]
 }
 
-Mapping: (ast::Expression, ast::Expression) = {
+Mapping: (ast::LocExpression, ast::LocExpression) = {
     <key:Expression> ":" <value:Expression> => (key, value)
 }
 

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::fmt;
 
-use crate::ast;
+use crate::ast::{self, Argument};
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -107,7 +107,7 @@ impl fmt::Display for InterpreterError {
 #[derive(Debug)]
 pub struct InterpreterErrorMessage {
     error: InterpreterError,
-    statement: Option<Rc<ast::Statement>>
+    statement: Option<Rc<ast::LocStatement>>
 }
 
 impl fmt::Display for InterpreterErrorMessage {
@@ -151,8 +151,8 @@ impl Hash for Value {
 
 
 
-pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
-    match expression {
+pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpression, statement: Rc<ast::LocStatement>, program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
+    match &expression.expression {
         ast::Expression::IntLiteral(i) => Ok(Value::Int(*i)),
         ast::Expression::BoolLiteral(b) => Ok(Value::Bool(*b)),
         ast::Expression::Variable(var) => {
@@ -165,7 +165,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             }
         },
         ast::Expression::Typecheck { expression, expected_type } => {
-            let value = eval_expression(state, expression, statement.clone(), program)?;
+            let value = eval_expression(state, &expression, statement.clone(), program)?;
 
             return Ok(Value::Bool( match (value, expected_type) {
                 (Value::Int(_), ast::Type::Int) 
@@ -177,8 +177,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             }));
         },
         ast::Expression::BinaryOperation { operator, left, right } => {
-            let left = eval_expression(state, left, statement.clone(), program)?;
-            let right = eval_expression(state, right, statement.clone(), program)?;
+            let left = eval_expression(state, &left, statement.clone(), program)?;
+            let right = eval_expression(state, &right, statement.clone(), program)?;
             match operator {
                 ast::BinOperator::Add 
                 | ast::BinOperator::Sub 
@@ -286,7 +286,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             }
         },
         ast::Expression::UnaryOperation { operator, expression } => {
-            let expression = eval_expression(state, expression, statement.clone(), program)?;
+            let expression = eval_expression(state, &expression, statement.clone(), program)?;
 
             match operator {
                 ast::UnOperator::Neg => {
@@ -360,11 +360,11 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
 
             state.stack.push(state.values.clone());
 
-            let new_values: HashMap<String, Value> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).collect();
+            let new_values: HashMap<String, Value> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).map(|(arg, value)| (arg.name, value)).collect();
             state.values = new_values;
             state.return_value = None;
 
-            interpret_function_body(state, function, function_name, program)
+            interpret_function_body(state, function, &function_name, program)
         },
         ast::Expression::TupleDefinition { elements } => {
             let values: Result<Vec<Value>, InterpreterErrorMessage>
@@ -382,8 +382,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             let mut map: HashMap<Value, Value> = HashMap::new();
 
             for (key, value) in elements {
-                let key = eval_expression(state, key, statement.clone(), program)?;
-                let value = eval_expression(state, value, statement.clone(), program)?;
+                let key = eval_expression(state, &key, statement.clone(), program)?;
+                let value = eval_expression(state, &value, statement.clone(), program)?;
 
                 map.insert(key, value);
             }
@@ -391,8 +391,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             Ok(Value::DictionaryReference { index_ref: Rc::new(RefCell::new(map)) })
         },
         ast::Expression::Indexing { indexed, indexer } => {
-            let original_indexed = eval_expression(state, indexed, statement.clone(), program)?;
-            let indexer = eval_expression(state, indexer, statement.clone(), program)?;
+            let original_indexed = eval_expression(state, &indexed, statement.clone(), program)?;
+            let indexer = eval_expression(state, &indexer, statement.clone(), program)?;
 
             let indexed = match original_indexed {
                 Value::Tuple { ref elements } => elements,
@@ -437,11 +437,11 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
     }
 }
 
-pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, program: &ast::Program) -> Result<Option<Value>, InterpreterErrorMessage> {
+pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement, program: &ast::Program) -> Result<Option<Value>, InterpreterErrorMessage> {
     let stmt_ref = Rc::new(stmt.clone());
-    let eval = match stmt {
+    let eval = match stmt.statement {
         ast::Statement::Assignment {target, expression} => {
-            match target {
+            match target.expression {
                 ast::Expression::Variable(variable) => {
                     let v = eval_expression(state, &expression, stmt_ref, program)?;
                     state.values.entry(variable).and_modify(|value| *value = v.clone()).or_insert(v);
@@ -451,7 +451,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                     let indexer = eval_expression(state, &indexer, stmt_ref.clone(), program)?;
 
                    
-                    let original_indexed =  match *indexed {
+                    let original_indexed =  match indexed.expression {
                         ast::Expression::Variable(_)
                         | ast::Expression::Indexing { .. } => {
                             eval_expression(state, &indexed, stmt_ref.clone(), program)?
@@ -578,7 +578,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             Ok(None)
         },
         ast::Statement::ListAppend { target, value } => {
-            let original_indexed =  match target {
+            let original_indexed =  match target.expression {
                 ast::Expression::Variable(_)
                 | ast::Expression::Indexing { .. } => {
                     eval_expression(state, &target, stmt_ref.clone(), program)?
