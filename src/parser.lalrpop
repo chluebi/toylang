@@ -1,6 +1,4 @@
 use std::str::FromStr;
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::collections::HashMap;
 
 use crate::ast;
@@ -209,10 +207,10 @@ Expression: ast::Expression = {
     "(" <e:Expression> "," <elts: CommaSeperatedExpressions> ")" => {
         let mut elts = elts;
         elts.insert(0, e);
-        return ast::Expression::Tuple {elements: elts};
+        return ast::Expression::TupleDefinition {elements: elts};
     },
-    "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(elts))},
-    "{" <elts: CommaSeperatedMappings> "}" => ast::Expression::DictionaryInitialisation {elements: elts},
+    "[" <elts: CommaSeperatedExpressions> "]" => ast::Expression::ListDefinition {elements: elts},
+    "{" <elts: CommaSeperatedMappings> "}" => ast::Expression::DictionaryDefinition {elements: elts},
     <indexed: Expression> "[" <indexer: IndexExpression> "]" => ast::Expression::Indexing {
         indexed: Box::new(indexed), indexer: Box::new(indexer)
     },

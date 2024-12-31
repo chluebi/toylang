@@ -6,11 +6,66 @@ use std::fmt;
 
 use crate::ast;
 
-type FunctionFrame = HashMap<String, ast::Expression>;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Value {
+    Int(i64),
+    Bool(bool),
+    Tuple {
+        elements: Vec<Value>
+    },
+    ListReference {
+        elements_ref: Rc<RefCell<Vec<Value>>>
+    },
+    DictionaryReference {
+        index_ref: Rc<RefCell<HashMap<Value,Value>>>
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Int(i) => write!(f, "{}", i),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Tuple {elements} => {
+                write!(f, "(")?;
+                for (i, elt) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elt)?;
+                }
+                write!(f, ")")
+            },
+            Value::ListReference { elements_ref } => {
+                write!(f, "[")?;
+                for (i, elt) in elements_ref.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elt)?;
+                }
+                write!(f, "]")
+            },
+            Value::DictionaryReference { index_ref } => {
+                write!(f, "{{")?;
+                for (i, (key, value)) in index_ref.borrow().iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", key, value)?;
+                }
+                write!(f, "}}")
+            }
+        }
+    }
+}
+
+type FunctionFrame = HashMap<String, Value>;
 pub struct InterpreterState {
     stack: Vec<FunctionFrame>,
     values: FunctionFrame,
-    return_value: Option<ast::Expression>
+    return_value: Option<Value>
 }
 
 impl fmt::Display for InterpreterState {
@@ -27,11 +82,12 @@ impl fmt::Display for InterpreterState {
 #[derive(Debug)]
 enum InterpreterError {
     Panic(String),
-    InvalidType(ast::Expression, String, String),
+    InvalidType(Value, String, String),
+    InvalidLHS(ast::Expression, String),
     VariableNotFound(String),
-    IndexOutofBounds(ast::Expression, usize),
-    IndexNotInDict(ast::Expression, ast::Expression),
-    Unhashable(ast::Expression)
+    IndexOutofBounds(Value, usize),
+    IndexNotInDict(Value, Value),
+    Unhashable(Value)
 }
 
 impl fmt::Display for InterpreterError {
@@ -39,6 +95,7 @@ impl fmt::Display for InterpreterError {
         match self {
             InterpreterError::Panic(err) => write!(f, "Interpreter Panic: {}", err),
             InterpreterError::InvalidType(expr, expected_type, comment) => write!(f, "Using {} operation on {}: {}", expected_type, expr, comment),
+            InterpreterError::InvalidLHS(expr, comment) => write!(f, "Assigning to {}: {}", expr, comment),
             InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var),
             InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", index, expr),
             InterpreterError::IndexNotInDict(expr, index) => write!(f, "Index of {} is not in {}", index, expr),
@@ -65,40 +122,39 @@ impl fmt::Display for InterpreterErrorMessage {
 impl std::error::Error for InterpreterErrorMessage {}
 
 
-impl Hash for ast::Expression {
+impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state); // Hash the enum variant
 
         match self {
-            ast::Expression::IntLiteral(i) => i.hash(state),
-            ast::Expression::BoolLiteral(b) => b.hash(state),
-            ast::Expression::Tuple { elements } => {
+            Value::Int(i) => i.hash(state),
+            Value::Bool(b) => b.hash(state),
+            Value::Tuple { elements } => {
                 for el in elements {
                     el.hash(state);
                 }
             },
-            ast::Expression::ListReference { elements_ref } => {
+            Value::ListReference { elements_ref } => {
                 for el in elements_ref.borrow().iter() {
                     el.hash(state);
                 }
             },
-            ast::Expression::DictionaryReference { index_ref } => {
+            Value::DictionaryReference { index_ref } => {
                 for (key, value) in index_ref.borrow().iter() {
                     key.hash(state);
                     value.hash(state);
                 }
-            },
-            _ => unreachable!("Hashing unhashable expression!")
+            }
         }
     }
 }
 
 
 
-pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
+pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expression, statement: Rc<ast::Statement>, program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
     match expression {
-        ast::Expression::IntLiteral(_)
-        | ast::Expression::BoolLiteral(_) => Ok(expression.clone()),
+        ast::Expression::IntLiteral(i) => Ok(Value::Int(*i)),
+        ast::Expression::BoolLiteral(b) => Ok(Value::Bool(*b)),
         ast::Expression::Variable(var) => {
             match (*state).values.get(var) {
                 Some(v) => Ok(v.clone()),
@@ -109,13 +165,14 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             }
         },
         ast::Expression::Typecheck { expression, expected_type } => {
-            let expression = eval_expression(state, expression, statement.clone(), program)?;
+            let value = eval_expression(state, expression, statement.clone(), program)?;
 
-            return Ok(ast::Expression::BoolLiteral( match (expression, expected_type) {
-                (ast::Expression::IntLiteral(_), ast::Type::Int) 
-                | (ast::Expression::BoolLiteral(_), ast::Type::Bool)
-                | (ast::Expression::Tuple { elements: _ }, ast::Type::Tuple)
-                | (ast::Expression::ListReference { elements_ref: _ }, ast::Type::List) => true,
+            return Ok(Value::Bool( match (value, expected_type) {
+                (Value::Int(_), ast::Type::Int) 
+                | (Value::Bool(_), ast::Type::Bool)
+                | (Value::Tuple { elements: _ }, ast::Type::Tuple)
+                | (Value::ListReference { elements_ref: _ }, ast::Type::List) 
+                | (Value::DictionaryReference { index_ref: _ }, ast::Type::Dict)=> true,
                 (_, _) => false
             }));
         },
@@ -136,8 +193,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                 | ast::BinOperator::Geq
                 => {
                     let evaled = match (left.clone(), right) {
-                        (ast::Expression::IntLiteral(left), ast::Expression::IntLiteral(right)) => Ok((left, right)),
-                        (ast::Expression::IntLiteral(_), x) => Err(
+                        (Value::Int(left), Value::Int(right)) => Ok((left, right)),
+                        (Value::Int(_), x) => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                                 statement: Some(statement)
@@ -154,18 +211,18 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                     let (left, right) = evaled?;
 
                     Ok(match operator {
-                        ast::BinOperator::Add => ast::Expression::IntLiteral(left + right),
-                        ast::BinOperator::Sub => ast::Expression::IntLiteral(left - right),
-                        ast::BinOperator::Mul => ast::Expression::IntLiteral(left * right),
-                        ast::BinOperator::Div => ast::Expression::IntLiteral(left / right),
-                        ast::BinOperator::Mod => ast::Expression::IntLiteral(left % right),
+                        ast::BinOperator::Add => Value::Int(left + right),
+                        ast::BinOperator::Sub => Value::Int(left - right),
+                        ast::BinOperator::Mul => Value::Int(left * right),
+                        ast::BinOperator::Div => Value::Int(left / right),
+                        ast::BinOperator::Mod => Value::Int(left % right),
 
-                        ast::BinOperator::Eq => ast::Expression::BoolLiteral(left == right),
-                        ast::BinOperator::Neq => ast::Expression::BoolLiteral(left != right),
-                        ast::BinOperator::Lt => ast::Expression::BoolLiteral(left < right),
-                        ast::BinOperator::Gt => ast::Expression::BoolLiteral(left > right),
-                        ast::BinOperator::Leq => ast::Expression::BoolLiteral(left <= right),
-                        ast::BinOperator::Geq => ast::Expression::BoolLiteral(left >= right),
+                        ast::BinOperator::Eq => Value::Bool(left == right),
+                        ast::BinOperator::Neq => Value::Bool(left != right),
+                        ast::BinOperator::Lt => Value::Bool(left < right),
+                        ast::BinOperator::Gt => Value::Bool(left > right),
+                        ast::BinOperator::Leq => Value::Bool(left <= right),
+                        ast::BinOperator::Geq => Value::Bool(left >= right),
 
                         _ => unreachable!("This should never be reached")
                     })
@@ -173,8 +230,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                 ast::BinOperator::And
                 | ast::BinOperator::Or => {
                     let evaled = match (left, right) {
-                        (ast::Expression::BoolLiteral(left), ast::Expression::BoolLiteral(right)) => Ok((left, right)),
-                        (ast::Expression::BoolLiteral(_), x) => Err(
+                        (Value::Bool(left), Value::Bool(right)) => Ok((left, right)),
+                        (Value::Bool(_), x) => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "bool".to_string(), "".to_string()),
                                 statement: Some(statement)
@@ -196,12 +253,12 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         _ => unreachable!("This should never be reached")
                     };
 
-                    return Ok(ast::Expression::BoolLiteral(res));
+                    return Ok(Value::Bool(res));
                 },
                 ast::BinOperator::ListConcat => {
                     let evaled = match (left, right) {
-                        (ast::Expression::ListReference {elements_ref: left}, ast::Expression::ListReference{elements_ref: right}) => Ok((left, right)),
-                        (ast::Expression::ListReference {elements_ref: _}, x) => Err(
+                        (Value::ListReference {elements_ref: left}, Value::ListReference{elements_ref: right}) => Ok((left, right)),
+                        (Value::ListReference {elements_ref: _}, x) => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
                                 statement: Some(statement)
@@ -224,7 +281,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         _ => unreachable!("This should never be reached")
                     };
 
-                    return Ok(ast::Expression::ListReference {elements_ref: Rc::new(RefCell::new(res))});
+                    return Ok(Value::ListReference {elements_ref: Rc::new(RefCell::new(res))});
                 }            
             }
         },
@@ -234,7 +291,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             match operator {
                 ast::UnOperator::Neg => {
                     let evaled = match expression {
-                        ast::Expression::IntLiteral(expression) => Ok(expression),
+                        Value::Int(expression) => Ok(expression),
                         x => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
@@ -248,11 +305,11 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         _ => unreachable!("This should never be reached")
                     };
 
-                    return Ok(ast::Expression::IntLiteral(res));
+                    return Ok(Value::Int(res));
                 },
                 ast::UnOperator::Not => {
                     let evaled = match expression {
-                        ast::Expression::BoolLiteral(expression) => Ok(expression),
+                        Value::Bool(expression) => Ok(expression),
                         x => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "bool".to_string(), "".to_string()),
@@ -266,11 +323,11 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         _ => unreachable!("This should never be reached")
                     };
 
-                    return Ok(ast::Expression::BoolLiteral(res));
+                    return Ok(Value::Bool(res));
                 },
                 ast::UnOperator::Length => {
                     let evaled = match expression {
-                        ast::Expression::ListReference { elements_ref } => Ok(elements_ref),
+                        Value::ListReference { elements_ref } => Ok(elements_ref),
                         x => Err(
                             InterpreterErrorMessage {
                                 error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
@@ -284,7 +341,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                         _ => unreachable!("This should never be reached")
                     };
 
-                    return Ok(ast::Expression::IntLiteral(res));
+                    return Ok(Value::Int(res));
                 }
             }
         },
@@ -297,65 +354,50 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
                 })
             };
 
-            let argument_values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
+            let argument_values: Result<Vec<Value>, InterpreterErrorMessage>
                 = arguments.iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
-            let argument_values: Vec<ast::Expression> = argument_values?;
+            let argument_values: Vec<Value> = argument_values?;
 
             state.stack.push(state.values.clone());
 
-            let new_values: HashMap<String, ast::Expression> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).collect();
+            let new_values: HashMap<String, Value> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).collect();
             state.values = new_values;
             state.return_value = None;
 
             interpret_function_body(state, function, function_name, program)
         },
-        ast::Expression::Tuple { elements } => {
-            let values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
+        ast::Expression::TupleDefinition { elements } => {
+            let values: Result<Vec<Value>, InterpreterErrorMessage>
                 = elements.iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
-            let values: Vec<ast::Expression> = values?;
-            Ok(ast::Expression::Tuple { elements: values })
+            let values: Vec<Value> = values?;
+            Ok(Value::Tuple { elements: values })
         },
-        ast::Expression::ListReference { elements_ref } => {
-            let values: Result<Vec<ast::Expression>, InterpreterErrorMessage>
-                = elements_ref.borrow().iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
-            let values: Vec<ast::Expression> = values?;
-            Ok(ast::Expression::ListReference { elements_ref: Rc::new(RefCell::new(values)) })
+        ast::Expression::ListDefinition { elements } => {
+            let values: Result<Vec<Value>, InterpreterErrorMessage>
+                = elements.iter().map(|arg| eval_expression(state, arg, statement.clone(), program)).collect();
+            let values: Vec<Value> = values?;
+            Ok(Value::ListReference { elements_ref: Rc::new(RefCell::new(values)) })
         },
-        ast::Expression::DictionaryReference { index_ref: _ } => {
-            Ok(expression.clone()) // dictionary references should always already be fully evaluated
-        },
-        ast::Expression::DictionaryInitialisation { elements } => {
-            let mut map: HashMap<ast::Expression, ast::Expression> = HashMap::new();
+        ast::Expression::DictionaryDefinition { elements } => {
+            let mut map: HashMap<Value, Value> = HashMap::new();
 
             for (key, value) in elements {
                 let key = eval_expression(state, key, statement.clone(), program)?;
                 let value = eval_expression(state, value, statement.clone(), program)?;
 
-                match key {
-                    ast::Expression::IntLiteral(_)
-                    | ast::Expression::BoolLiteral(_)
-                    | ast::Expression::Tuple { elements: _ }
-                    | ast::Expression::ListReference { elements_ref: _ }
-                    | ast::Expression::DictionaryReference { index_ref: _ } => (),
-                    _ => return Err(InterpreterErrorMessage {
-                        error: InterpreterError::Unhashable(key),
-                        statement: Some(statement.clone())
-                    })
-                }
-
                 map.insert(key, value);
             }
 
-            Ok(ast::Expression::DictionaryReference { index_ref: Rc::new(RefCell::new(map)) })
+            Ok(Value::DictionaryReference { index_ref: Rc::new(RefCell::new(map)) })
         },
         ast::Expression::Indexing { indexed, indexer } => {
             let original_indexed = eval_expression(state, indexed, statement.clone(), program)?;
             let indexer = eval_expression(state, indexer, statement.clone(), program)?;
 
             let indexed = match original_indexed {
-                ast::Expression::Tuple { ref elements } => elements,
-                ast::Expression::ListReference { ref elements_ref } => &elements_ref.borrow(),
-                ast::Expression::DictionaryReference { ref index_ref } => {
+                Value::Tuple { ref elements } => elements,
+                Value::ListReference { ref elements_ref } => &elements_ref.borrow(),
+                Value::DictionaryReference { ref index_ref } => {
                     match index_ref.borrow().get(&indexer) {
                         Some(x) => return Ok(x.clone()),
                         _ => return Err(InterpreterErrorMessage {
@@ -372,7 +414,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
             
 
             let mut indexer = match indexer {
-                ast::Expression::IntLiteral(i) => i,
+                Value::Int(i) => i,
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                     statement: Some(statement)
@@ -395,7 +437,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::Expressio
     }
 }
 
-pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
+pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, program: &ast::Program) -> Result<Option<Value>, InterpreterErrorMessage> {
     let stmt_ref = Rc::new(stmt.clone());
     let eval = match stmt {
         ast::Statement::Assignment {target, expression} => {
@@ -415,15 +457,15 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                             eval_expression(state, &indexed, stmt_ref.clone(), program)?
                         }
                         x => return Err(InterpreterErrorMessage {
-                            error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                            error: InterpreterError::InvalidLHS(x, "Can only assign to variables or indexing".to_string()),
                             statement: Some(stmt_ref)
                         })
                     };
 
                     match original_indexed {
-                        ast::Expression::ListReference { elements_ref: ref indexed } => {
+                        Value::ListReference { elements_ref: ref indexed } => {
                             let mut indexer = match indexer {
-                                ast::Expression::IntLiteral(i) => i,
+                                Value::Int(i) => i,
                                 x => return Err(InterpreterErrorMessage {
                                     error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
                                     statement: Some(stmt_ref)
@@ -449,7 +491,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
 
                             Ok(None)
                         },
-                        ast::Expression::DictionaryReference { index_ref: ref indexed } => {
+                        Value::DictionaryReference { index_ref: ref indexed } => {
                             let value = eval_expression(state, &expression, stmt_ref.clone(), program)?;
                             indexed.borrow_mut().insert(indexer, value);
 
@@ -462,7 +504,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                     }
                 },
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                    error: InterpreterError::InvalidLHS(x, "Can only assign to variables and indexing".to_string()),
                     statement: Some(stmt_ref)
                 })
             }
@@ -489,7 +531,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
 
             match eval_condition {
-                ast::Expression::BoolLiteral(b) => {
+                Value::Bool(b) => {
                     match b {
                         true => interpret_body(state, &if_body, program),
                         false => interpret_body(state, &else_body, program),
@@ -508,7 +550,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
             let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
 
             let mut cond = match eval_condition {
-                ast::Expression::BoolLiteral(b) => b,
+                Value::Bool(b) => b,
                 x => {
                     return Err(InterpreterErrorMessage {
                         error: InterpreterError::Panic(format!("Using non-bool value in loop: {}", x)),
@@ -522,7 +564,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
 
                 let eval_condition = eval_expression(state, &condition, stmt_ref.clone(), program)?;
                 cond = match eval_condition {
-                    ast::Expression::BoolLiteral(b) => b,
+                    Value::Bool(b) => b,
                     x => {
                         return Err(InterpreterErrorMessage {
                             error: InterpreterError::Panic(format!("Using non-bool value in loop: {}", x)),
@@ -542,13 +584,13 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
                     eval_expression(state, &target, stmt_ref.clone(), program)?
                 }
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists and dictionaries can be index assigned".to_string()),
+                    error: InterpreterError::InvalidLHS(x, "Can only append to variables and indexing".to_string()),
                     statement: Some(stmt_ref)
                 })
             };
 
             let indexed = match original_indexed {
-                ast::Expression::ListReference { ref elements_ref } => elements_ref,
+                Value::ListReference { ref elements_ref } => elements_ref,
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only lists can be empty-indexed".to_string()),
                     statement: Some(stmt_ref)
@@ -572,7 +614,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::Statement, p
     eval
 }
 
-pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body, program: &ast::Program) -> Result<Option<ast::Expression>, InterpreterErrorMessage> {
+pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body, program: &ast::Program) -> Result<Option<Value>, InterpreterErrorMessage> {
     for stmt in body.statements.clone() {
         // println!("{}", state);
         // println!("{}", stmt);
@@ -585,7 +627,7 @@ pub fn interpret_body(state: &mut InterpreterState, body: &ast::Body, program: &
     return Ok(None);
 }
 
-pub fn interpret_function_body(state: &mut InterpreterState, function: &ast::Function, function_name: &String, program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage>{
+pub fn interpret_function_body(state: &mut InterpreterState, function: &ast::Function, function_name: &String, program: &ast::Program) -> Result<Value, InterpreterErrorMessage>{
     interpret_body(state, &function.body, program)?;
     
     if let Some(v) = &state.return_value {
@@ -601,7 +643,7 @@ pub fn interpret_function_body(state: &mut InterpreterState, function: &ast::Fun
     )
 }
 
-pub fn interpret(program: &ast::Program) -> Result<ast::Expression, InterpreterErrorMessage> {
+pub fn interpret(program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
 
     println!("{}", program);
 

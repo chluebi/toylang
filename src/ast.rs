@@ -1,6 +1,5 @@
 use std::fmt;
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::ops::Range;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -8,7 +7,8 @@ pub enum Type {
     Int,
     Bool,
     Tuple,
-    List
+    List,
+    Dict
 }
 
 impl fmt::Display for Type {
@@ -18,6 +18,7 @@ impl fmt::Display for Type {
             Type::Bool => write!(f, "bool"),
             Type::Tuple => write!(f, "tuple"),
             Type::List => write!(f, "list"),
+            Type::Dict => write!(f, "dict")
         }
     }
 }
@@ -84,8 +85,7 @@ impl fmt::Display for UnOperator {
     }
 }
 
-
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
@@ -107,17 +107,14 @@ pub enum Expression {
         function_name: String,
         arguments: Vec<Expression>
     },
-    Tuple {
+    TupleDefinition {
         elements: Vec<Expression>
     },
-    ListReference {
-        elements_ref: Rc<RefCell<Vec<Expression>>>
+    ListDefinition {
+        elements: Vec<Expression>
     },
-    DictionaryInitialisation {
+    DictionaryDefinition {
         elements: Vec<(Expression, Expression)>
-    },
-    DictionaryReference {
-        index_ref: Rc<RefCell<HashMap<Expression,Expression>>>
     },
     Indexing {
         indexed: Box<Expression>,
@@ -150,7 +147,7 @@ impl fmt::Display for Expression {
                 }
                 write!(f, ")")
             },
-            Expression::Tuple {elements} => {
+            Expression::TupleDefinition {elements} => {
                 write!(f, "(")?;
                 for (i, elt) in elements.iter().enumerate() {
                     if i > 0 {
@@ -160,9 +157,9 @@ impl fmt::Display for Expression {
                 }
                 write!(f, ")")
             },
-            Expression::ListReference { elements_ref } => {
+            Expression::ListDefinition { elements } => {
                 write!(f, "[")?;
-                for (i, elt) in elements_ref.borrow().iter().enumerate() {
+                for (i, elt) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
@@ -170,17 +167,7 @@ impl fmt::Display for Expression {
                 }
                 write!(f, "]")
             },
-            Expression::DictionaryReference { index_ref } => {
-                write!(f, "{{")?;
-                for (i, (key, value)) in index_ref.borrow().iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}: {}", key, value)?;
-                }
-                write!(f, "}}")
-            },
-            Expression::DictionaryInitialisation { elements } => {
+            Expression::DictionaryDefinition { elements } =>  {
                 write!(f, "{{")?;
                 for (i, (key, value)) in elements.iter().enumerate() {
                     if i > 0 {
@@ -196,6 +183,18 @@ impl fmt::Display for Expression {
         }
     }
 }
+
+pub struct LocExpression {
+    expression: Expression,
+    loc: Range<u64>
+}
+
+impl fmt::Display for LocExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expression)
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub enum Statement {

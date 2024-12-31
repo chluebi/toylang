@@ -23,7 +23,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(4181) => assert!(true),
+            interpreter::Value::Int(4181) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -35,7 +35,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(3628800) => assert!(true),
+            interpreter::Value::Int(3628800) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -47,7 +47,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(1) => assert!(true),
+            interpreter::Value::Int(1) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -59,7 +59,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::BoolLiteral(true) => assert!(true),
+            interpreter::Value::Bool(true) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -71,7 +71,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(4950) => assert!(true),
+            interpreter::Value::Int(4950) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -83,7 +83,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(9900) => assert!(true),
+            interpreter::Value::Int(9900) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -95,7 +95,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(1) => assert!(true),
+            interpreter::Value::Int(1) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -125,7 +125,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(11) => assert!(true),
+            interpreter::Value::Int(11) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -137,7 +137,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(1884) => assert!(true),
+            interpreter::Value::Int(1884) => assert!(true),
             _ => assert!(false)
         }
     }
@@ -149,7 +149,7 @@ mod tests {
         let res = interpreter::interpret(&program.unwrap()).unwrap();
 
         match res {
-            ast::Expression::IntLiteral(2047) => assert!(true),
+            interpreter::Value::Int(2047) => assert!(true),
             _ => assert!(false)
         }
     }
