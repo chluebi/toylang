@@ -296,7 +296,7 @@ impl fmt::Display for Function {
             if i > 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{};", arg)?;
+            write!(f, "{}", arg)?;
         }
         write!(f, ") {{\n{}\n}}", self.body)?;
         Ok(())
