@@ -2,6 +2,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::str;
 
+use lalrpop_util::ParseError;
+
 use crate::parser;
 use crate::interpreter;
 use crate::preprocess;
@@ -50,14 +52,57 @@ pub fn eval(path: String) -> Result<interpreter::Value, interpreter::Interpreter
     let program_text = read_file(&path).unwrap();
     let program = parser::GrammarParser::new().parse(&program_text);
     let program = preprocess::process_program(program.unwrap());
-    interpreter::interpret(&program)
+    interpreter::interpret(&program.unwrap())
 }
 
 
-pub fn run(path: String) -> () {
+pub fn run(path: String) -> () { 
     let program_text = read_file(&path).unwrap();
-    let program = parser::GrammarParser::new().parse(&program_text);
-    let program = preprocess::process_program(program.unwrap());
+
+    let program = match parser::GrammarParser::new().parse(&program_text) {
+        Ok(program) => program,
+        Err(e) => {
+            let span = match e {
+                lalrpop_util::ParseError::InvalidToken { location } => Some((location, location+1)),
+                lalrpop_util::ParseError::UnrecognizedEof {location, ..} => Some((location, location+1)),
+                lalrpop_util::ParseError::UnrecognizedToken { token: (start, _, end), .. } => Some((start, end)),
+                lalrpop_util::ParseError::ExtraToken { token: (start, _, end) } => Some((start, end)),
+                lalrpop_util::ParseError::User { .. } => None
+            };
+
+            match span {
+                Some((start, end)) => {
+                    let original_code_string = get_error_snippet(&program_text, start, end);
+                    println!("Parsing failed {}\n{}", e, original_code_string);
+                    return;
+                },
+                _ => {
+                    println!("Parsing failed {}:\n[Unknown Location]", e);
+                    return;
+                }
+            }
+        }
+    };
+
+
+    let program = match preprocess::process_program(program) {
+        Ok(program) => program,
+        Err(e) => {
+            match e.loc.clone() {
+                Some(range) => {
+                    let original_code_string = get_error_snippet(&program_text, range.start, range.end);
+                    println!("Program Failed: {}\n{}", e, original_code_string);
+                    return;
+                },
+                _ => {
+                    println!("Program Failed {}:\n[Unknown Location]", e);
+                    return;
+                }
+            }
+        }
+    };
+
+
     match interpreter::interpret(&program) {
         Ok(v) => println!("Program Executed with result {}", v),
         Err(e) => {
@@ -66,7 +111,7 @@ pub fn run(path: String) -> () {
                     let original_code_string = get_error_snippet(&program_text, range.start, range.end);
                     println!("Program Failed: {}\n{}", e, original_code_string)
                 },
-                _ => println!("Program Failed {}: [Unknown Location]", e)
+                _ => println!("Program Failed {}:\n[Unknown Location]", e)
             }
         }
     };

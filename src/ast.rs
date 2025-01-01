@@ -282,9 +282,26 @@ impl fmt::Display for Argument {
 
 
 #[derive(Debug, Clone)]
+pub struct KeywordArgument {
+    pub name: String,
+    pub expression: LocExpression,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for KeywordArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}={}", self.name, self.expression)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: String,
-    pub arguments: Vec<Argument>,
+    pub positional_arguments: Vec<Argument>,
+    pub variadic_argument: Option<Argument>,
+    pub keyword_arguments: Vec<KeywordArgument>,
+    pub keyword_variadic_argument: Option<Argument>,
     pub body: Body,
     pub loc: Range<usize>
 }
@@ -292,12 +309,40 @@ pub struct Function {
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
-        for (i, arg) in self.arguments.iter().enumerate() {
+        let mut i = 0;
+
+        for arg in self.positional_arguments.iter() {
             if i > 0 {
                 write!(f, ", ")?;
             }
             write!(f, "{}", arg)?;
+            i += 1;
         }
+
+        if let Some(variadic_argument) = &self.variadic_argument {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "*{}", variadic_argument)?;
+            i += 1;
+        }
+
+        for arg in self.keyword_arguments.iter() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", arg)?;
+            i += 1;
+        }
+
+        if let Some(keyword_variadic_argument) = &self.keyword_variadic_argument {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "**{}", keyword_variadic_argument)?;
+            i += 1;
+        }
+
         write!(f, ") {{\n{}\n}}", self.body)?;
         Ok(())
     }

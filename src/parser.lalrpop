@@ -51,10 +51,22 @@ Arguments: Vec<parse_ast::LocArgument> = {
 
 
 Argument: parse_ast::LocArgument = {
-     <start: @L> <i:Ident> <end: @R> => parse_ast::LocArgument{
+    <start: @L> <i:Ident> <end: @R> => parse_ast::LocArgument{
         argument: parse_ast::Argument::PositionalArgument(i),
         loc: start..end
-     },
+    },
+    <start: @L> "*"<i:Ident> <end: @R> => parse_ast::LocArgument{
+        argument: parse_ast::Argument::Variadic(i),
+        loc: start..end
+    },
+    <start: @L> <i:Ident> "=" <e:Expression> <end: @R> => parse_ast::LocArgument{
+        argument: parse_ast::Argument::KeywordArgument(i, e),
+        loc: start..end
+    },
+    <start: @L> "**"<i:Ident> <end: @R> => parse_ast::LocArgument{
+        argument: parse_ast::Argument::KeywordVariadic(i),
+        loc: start..end
+    }
 };
 
 

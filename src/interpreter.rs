@@ -350,7 +350,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
 
             state.stack.push(state.values.clone());
 
-            let new_values: HashMap<String, Value> = function.arguments.clone().into_iter().zip(argument_values.into_iter()).map(|(arg, value)| (arg.name, value)).collect();
+            let new_values: HashMap<String, Value> = function.positional_arguments.clone().into_iter().zip(argument_values.into_iter()).map(|(arg, value)| (arg.name, value)).collect();
             state.values = new_values;
             state.return_value = None;
 

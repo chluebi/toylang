@@ -273,7 +273,7 @@ impl fmt::Display for Body {
 pub enum Argument {
     PositionalArgument(String),
     Variadic(String),
-    KeywordArgument(String, Expression),
+    KeywordArgument(String, LocExpression),
     KeywordVariadic(String)
 }
 
