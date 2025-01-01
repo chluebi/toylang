@@ -36,6 +36,7 @@ fn process_type(t: parse_ast::Type) -> Result<ast::Type, PreprocessingErrorMessa
     match t {
         parse_ast::Type::Int => Ok(ast::Type::Int),
         parse_ast::Type::Bool => Ok(ast::Type::Bool),
+        parse_ast::Type::String => Ok(ast::Type::String),
         parse_ast::Type::Tuple => Ok(ast::Type::Tuple),
         parse_ast::Type::List => Ok(ast::Type::List),
         parse_ast::Type::Dict => Ok(ast::Type::Dict),
@@ -73,6 +74,7 @@ fn process_expression(expr: parse_ast::Expression) -> Result<ast::Expression, Pr
     match expr {
         parse_ast::Expression::IntLiteral(i) => Ok(ast::Expression::IntLiteral(i)),
         parse_ast::Expression::BoolLiteral(b) => Ok(ast::Expression::BoolLiteral(b)),
+        parse_ast::Expression::StringLiteral(s) => Ok(ast::Expression::StringLiteral(s)),
         parse_ast::Expression::Variable(var) => Ok(ast::Expression::Variable(var)),
         parse_ast::Expression::Typecheck { expression, expected_type } => {
             Ok(ast::Expression::Typecheck {

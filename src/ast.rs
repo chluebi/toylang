@@ -6,6 +6,7 @@ use std::collections::HashMap;
 pub enum Type {
     Int,
     Bool,
+    String,
     Tuple,
     List,
     Dict
@@ -16,6 +17,7 @@ impl fmt::Display for Type {
         match self {
             Type::Int => write!(f, "int"),
             Type::Bool => write!(f, "bool"),
+            Type::String => write!(f, "string"),
             Type::Tuple => write!(f, "tuple"),
             Type::List => write!(f, "list"),
             Type::Dict => write!(f, "dict")
@@ -89,6 +91,7 @@ impl fmt::Display for UnOperator {
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
+    StringLiteral(String),
     Variable(String),
     Typecheck {
         expression: Box<LocExpression>,
@@ -127,6 +130,7 @@ impl fmt::Display for Expression {
         match self {
             Expression::IntLiteral(i) => write!(f, "{}", i),
             Expression::BoolLiteral(b) => write!(f, "{}", b),
+            Expression::StringLiteral(s) => write!(f, "\"{}\"", s),
             Expression::Variable(var) => write!(f, "{}", var),
             Expression::Typecheck { expression, expected_type } => {
                 write!(f, "({} ?? {})", expression, expected_type)

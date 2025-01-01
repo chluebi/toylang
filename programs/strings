@@ -1,0 +1,5 @@
+main() {
+    d = {"abc": "zyx"};
+    s = "def";
+    return d["abc"] + s[0];
+}

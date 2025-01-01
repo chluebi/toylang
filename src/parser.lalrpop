@@ -486,6 +486,10 @@ Term: parse_ast::LocExpression = {
         expression: parse_ast::Expression::IntLiteral(n),
         loc: start..end
     },
+    <start: @L> <s:String> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::StringLiteral(s),
+        loc: start..end
+    },
     <start: @L> <id: Ident> <end: @R> => parse_ast::LocExpression {
         expression: parse_ast::Expression::Variable(id),
         loc: start..end
@@ -521,14 +525,83 @@ Mapping: (parse_ast::LocExpression, parse_ast::LocExpression) = {
 Type: parse_ast::Type = {
     "int" => parse_ast::Type::Int,
     "bool" => parse_ast::Type::Bool,
+    "string" => parse_ast::Type::String,
     "tuple" => parse_ast::Type::Tuple,
-    "list" => parse_ast::Type::List
+    "list" => parse_ast::Type::List,
+    "dict" => parse_ast::Type::Dict
 }
 
+Num: i64 = <s:NumString> => i64::from_str(s).unwrap();
 
-Num: i64 = <s:r"[0-9]+"> => i64::from_str(s).unwrap();
+String: String = {
+    <s:StringString> => s[1..s.len() - 1].to_string(),
+};
 
 
 Ident: String = {
-    <id:r"[a-zA-Z_][a-zA-Z0-9_]*"> => id.to_string(),
+    <id:IdentString> => id.to_string(),
 };
+
+
+match { 
+    r#"[0-9]+"# => NumString,
+    r#"[a-zA-Z_][a-zA-Z0-9_]*"# => IdentString,
+
+    ";",
+    ":",
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    ",",
+
+    "**",
+
+    "if",
+    "else",
+    "while",
+    "for",
+    "return",
+    "true",
+    "false",
+
+    "int",
+    "bool",
+    "string",
+    "tuple",
+    "list",
+    "dict",
+
+    "=",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "++",
+    "--",
+    "?",
+    "??",
+    "&&",
+    "||",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "<",
+    ">",
+    ">=",
+    "<=",
+    "==",
+    "!=",
+    "!",
+
+
+    "\""
+} else {
+    r#"\"[^\"]*\""# => StringString
+}
+
+

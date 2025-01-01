@@ -12,6 +12,7 @@ use crate::ast;
 pub enum Value {
     Int(i64),
     Bool(bool),
+    String(String),
     Tuple {
         elements: Vec<Value>
     },
@@ -28,6 +29,7 @@ impl fmt::Display for Value {
         match self {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
+            Value::String(s) => write!(f, "{}", s),
             Value::Tuple {elements} => {
                 write!(f, "(")?;
                 for (i, elt) in elements.iter().enumerate() {
@@ -129,6 +131,7 @@ impl Hash for Value {
         match self {
             Value::Int(i) => i.hash(state),
             Value::Bool(b) => b.hash(state),
+            Value::String(s) => s.hash(state),
             Value::Tuple { elements } => {
                 for el in elements {
                     el.hash(state);
@@ -145,6 +148,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
     match &expression.expression {
         ast::Expression::IntLiteral(i) => Ok(Value::Int(*i)),
         ast::Expression::BoolLiteral(b) => Ok(Value::Bool(*b)),
+        ast::Expression::StringLiteral(s) => Ok(Value::String(s.clone())),
         ast::Expression::Variable(var) => {
             match (*state).values.get(var) {
                 Some(v) => Ok(v.clone()),
@@ -160,6 +164,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             return Ok(Value::Bool( match (value, expected_type) {
                 (Value::Int(_), ast::Type::Int) 
                 | (Value::Bool(_), ast::Type::Bool)
+                | (Value::String(_), ast::Type::String)
                 | (Value::Tuple { elements: _ }, ast::Type::Tuple)
                 | (Value::ListReference { elements_ref: _ }, ast::Type::List) 
                 | (Value::DictionaryReference { index_ref: _ }, ast::Type::Dict)=> true,
@@ -170,8 +175,29 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             let left_value = eval_expression(state, &left, program)?;
             let right_value = eval_expression(state, &right, program)?;
             match operator {
-                ast::BinOperator::Add 
-                | ast::BinOperator::Sub 
+                ast::BinOperator::Add  => {
+                    match (left_value.clone(), right_value) {
+                        (Value::Int(left), Value::Int(right)) => {
+                            Ok(Value::Int(left + right))
+                        },
+                        (Value::String(left), Value::String(right)) => {
+                            Ok(Value::String(format!("{}{}", left, right)))
+                        },
+                        (Value::Int(_), x) => Err(
+                            InterpreterErrorMessage {
+                                error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                                range: Some(right.loc.clone())
+                            }
+                        ),
+                        (x, _) => Err(
+                            InterpreterErrorMessage {
+                                error:InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
+                                range: Some(left.loc.clone())
+                            }
+                        )
+                    }
+                }
+                ast::BinOperator::Sub 
                 | ast::BinOperator::Mul
                 | ast::BinOperator::Div
                 | ast::BinOperator::Mod
@@ -382,28 +408,29 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
         },
         ast::Expression::Indexing { indexed, indexer } => {
             let original_indexed_value = eval_expression(state, &indexed, program)?;
-            let indexer_value = eval_expression(state, &indexer, program)?;
+            let original_indexer_value = eval_expression(state, &indexer, program)?;
 
-            let indexed_value = match original_indexed_value {
-                Value::Tuple { ref elements } => elements,
-                Value::ListReference { ref elements_ref } => &elements_ref.borrow(),
-                Value::DictionaryReference { ref index_ref } => {
-                    match index_ref.borrow().get(&indexer_value) {
-                        Some(x) => return Ok(x.clone()),
-                        _ => return Err(InterpreterErrorMessage {
-                            error: InterpreterError::IndexNotInDict(original_indexed_value.clone(), indexer_value),
-                            range: Some(expression.loc.clone())
-                        })
-                    };
-                },
+            if let Value::DictionaryReference { ref index_ref } = original_indexed_value {
+                match index_ref.borrow().get(&original_indexer_value) {
+                    Some(x) => return Ok(x.clone()),
+                    _ => return Err(InterpreterErrorMessage {
+                        error: InterpreterError::IndexNotInDict(original_indexed_value.clone(), original_indexer_value),
+                        range: Some(expression.loc.clone())
+                    })
+                };
+            }
+
+            let indexed_length = match &original_indexed_value {
+                Value::String(s) => s.len(),
+                Value::Tuple { ref elements } => elements.len(),
+                Value::ListReference { ref elements_ref } => elements_ref.borrow().len(),
                 x => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::InvalidType(x, "indexable".to_string(), "Only tuples, lists and dictionaries can be indexed".to_string()),
+                    error: InterpreterError::InvalidType(x.clone(), "indexable".to_string(), "Only strings, tuples, lists and dictionaries can be indexed".to_string()),
                     range: Some(indexed.loc.clone())
                 })
             };
             
-
-            let mut indexer_value = match indexer_value {
+            let mut indexer_value = match original_indexer_value {
                 Value::Int(i) => i,
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidType(x, "int".to_string(), "".to_string()),
@@ -412,10 +439,28 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             };
 
             if indexer_value < 0 {
-                indexer_value = (indexed_value.len() as i64) - 2 - indexer_value;
+                indexer_value = (indexed_length as i64) - 2 - indexer_value;
             }
 
             let indexer_value = indexer_value as usize;
+
+            let indexed_value = match &original_indexed_value {
+                Value::String(s) => {
+                    match s.chars().nth(indexer_value) {
+                        Some(c) => return Ok(Value::String(c.to_string())),
+                        _ => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::IndexOutofBounds(original_indexed_value.clone(), indexer_value),
+                            range: Some(indexed.loc.clone())
+                        })
+                    }
+                },
+                Value::Tuple { ref elements } => elements,
+                Value::ListReference { ref elements_ref } => &elements_ref.borrow(),
+                x => return Err(InterpreterErrorMessage {
+                    error: InterpreterError::InvalidType(x.clone(), "indexable".to_string(), "Only strings, tuples, lists and dictionaries can be indexed".to_string()),
+                    range: Some(indexed.loc.clone())
+                })
+            };
 
             indexed_value.get(indexer_value)
                 .map(|value| value.clone())

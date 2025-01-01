@@ -98,4 +98,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn strings() {
+        match runner::eval("programs/strings".to_string()) {
+            Ok(interpreter::Value::String(s)) if s == "zyxd".to_string() => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }
