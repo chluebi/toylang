@@ -1,0 +1,16 @@
+
+sum(*args) {
+    s = 0;
+    for (i = 0; i < ?args; i++) {
+        s += args[i];
+    }
+    return s;
+}
+
+f(x, y, *args) {
+    return sum(*args) * sum(x, y);
+}
+
+main() {
+    return f(*[1, 2, 3, 4, 5]);
+}

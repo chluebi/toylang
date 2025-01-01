@@ -88,6 +88,38 @@ impl fmt::Display for UnOperator {
 }
 
 #[derive(Debug, Clone)]
+pub enum CallArgument {
+    PositionalArgument(LocExpression),
+    Variadic(LocExpression),
+    KeywordArgument(String, LocExpression),
+    KeywordVariadic(LocExpression)
+}
+
+impl fmt::Display for CallArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CallArgument::PositionalArgument(expr) => write!(f, "{}", expr),
+            CallArgument::Variadic(expr) => write!(f, "*{}", expr),
+            CallArgument::KeywordArgument(name, expr) => write!(f, "{}={}", name, expr),
+            CallArgument::KeywordVariadic(expr) => write!(f, "*{}", expr),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LocCallArgument {
+    pub argument: CallArgument,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for LocCallArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.argument)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
@@ -108,7 +140,7 @@ pub enum Expression {
     },
     FunctionCall {
         function_name: String,
-        arguments: Vec<LocExpression>
+        arguments: Vec<LocCallArgument>
     },
     TupleDefinition {
         elements: Vec<LocExpression>

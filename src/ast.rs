@@ -88,6 +88,33 @@ impl fmt::Display for UnOperator {
 }
 
 #[derive(Debug, Clone)]
+pub struct CallArgument {
+    pub expression: Box<LocExpression>,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for CallArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expression)
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct CallKeywordArgument {
+    pub name: String,
+    pub expression: Box<LocExpression>,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for CallKeywordArgument {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}={}", self.name, self.expression)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     IntLiteral(i64),
     BoolLiteral(bool),
@@ -108,7 +135,10 @@ pub enum Expression {
     },
     FunctionCall {
         function_name: String,
-        arguments: Vec<LocExpression>
+        positional_arguments: Vec<CallArgument>,
+        variadic_argument: Option<CallArgument>,
+        keyword_arguments: Vec<CallKeywordArgument>,
+        keyword_variadic_argument: Option<CallArgument>
     },
     TupleDefinition {
         elements: Vec<LocExpression>
@@ -141,14 +171,47 @@ impl fmt::Display for Expression {
             Expression::UnaryOperation { operator, expression } => {
                 write!(f, "({} {})", operator, expression)
             },
-            Expression::FunctionCall { function_name: function, arguments } => {
-                write!(f, "{}(", function)?;
-                for (i, arg) in arguments.iter().enumerate() {
+            Expression::FunctionCall {
+                function_name,
+                positional_arguments,
+                variadic_argument,
+                keyword_arguments,
+                keyword_variadic_argument 
+            } => {
+                write!(f, "{}(", function_name)?;
+                let mut i = 0;
+                for arg in positional_arguments.iter() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}", arg)?;
+                    i += 1;
                 }
+
+                if let Some(variadic_argument) = &variadic_argument {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "*{}", variadic_argument)?;
+                    i += 1;
+                }
+        
+                for arg in keyword_arguments.iter() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", arg)?;
+                    i += 1;
+                }
+        
+                if let Some(keyword_variadic_argument) = &keyword_variadic_argument {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "**{}", keyword_variadic_argument)?;
+                    i += 1;
+                }
+
                 write!(f, ")")
             },
             Expression::TupleDefinition {elements} => {

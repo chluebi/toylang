@@ -286,6 +286,37 @@ LHSExpression: parse_ast::LocExpression = {
 };
 
 
+CallArguments: Vec<parse_ast::LocCallArgument> = {
+    <arg:CallArgument> "," <args:CallArguments> => {
+        let mut args = args;
+        args.insert(0, arg);
+        args
+    },
+    <arg:CallArgument> => vec![arg],
+    => vec![]
+};
+
+
+CallArgument: parse_ast::LocCallArgument = {
+    <start: @L> <e:Expression> <end: @R> => parse_ast::LocCallArgument{
+        argument: parse_ast::CallArgument::PositionalArgument(e),
+        loc: start..end
+    },
+    <start: @L> "*"<e:Expression> <end: @R> => parse_ast::LocCallArgument{
+        argument: parse_ast::CallArgument::Variadic(e),
+        loc: start..end
+    },
+    <start: @L> <i:Ident> "=" <e:Expression> <end: @R> => parse_ast::LocCallArgument{
+        argument: parse_ast::CallArgument::KeywordArgument(i, e),
+        loc: start..end
+    },
+    <start: @L> "**"<e:Expression> <end: @R> => parse_ast::LocCallArgument{
+        argument: parse_ast::CallArgument::KeywordVariadic(e),
+        loc: start..end
+    }
+};
+
+
 Expression: parse_ast::LocExpression = {
     #[precedence(level="0")]
     Term,
@@ -312,7 +343,7 @@ Expression: parse_ast::LocExpression = {
         },
         loc: start..end
     },
-    <start: @L> <id:Ident> "(" <args:CommaSeperatedExpressions> ")" <end: @R> => parse_ast::LocExpression {
+    <start: @L> <id:Ident> "(" <args:CallArguments> ")" <end: @R> => parse_ast::LocExpression {
         expression: parse_ast::Expression::FunctionCall {
             function_name: id,
             arguments: args

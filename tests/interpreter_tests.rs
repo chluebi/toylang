@@ -106,4 +106,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn variadic() {
+        match runner::eval("programs/variadic".to_string()) {
+            Ok(interpreter::Value::Int(36)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }

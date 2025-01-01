@@ -90,6 +90,8 @@ enum InterpreterError {
     VariableNotFound(String),
     IndexOutofBounds(Value, usize),
     IndexNotInDict(Value, Value),
+    MissingArgument(String),
+    UnexpectedArgument(ast::LocExpression),
     Unhashable(Value)
 }
 
@@ -102,6 +104,8 @@ impl fmt::Display for InterpreterError {
             InterpreterError::VariableNotFound(var) => write!(f, "Unknown Variable: {}", var),
             InterpreterError::IndexOutofBounds(expr, index) => write!(f, "Index of {} is out of bounds on {}", index, expr),
             InterpreterError::IndexNotInDict(expr, index) => write!(f, "Index of {} is not in {}", index, expr),
+            InterpreterError::MissingArgument(s) => write!(f, "Missing argument {}", s),
+            InterpreterError::UnexpectedArgument(e) => write!(f, "Unexpected argument {}", e),
             InterpreterError::Unhashable(expr) => write!(f, "Expression {} is unhashable", expr)
         }
     }
@@ -144,13 +148,13 @@ impl Hash for Value {
 
 
 
-pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpression, program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
-    match &expression.expression {
-        ast::Expression::IntLiteral(i) => Ok(Value::Int(*i)),
-        ast::Expression::BoolLiteral(b) => Ok(Value::Bool(*b)),
+pub fn eval_expression(state: &mut InterpreterState, expression: ast::LocExpression, program: &ast::Program) -> Result<Value, InterpreterErrorMessage> {
+    match expression.expression {
+        ast::Expression::IntLiteral(i) => Ok(Value::Int(i)),
+        ast::Expression::BoolLiteral(b) => Ok(Value::Bool(b)),
         ast::Expression::StringLiteral(s) => Ok(Value::String(s.clone())),
         ast::Expression::Variable(var) => {
-            match (*state).values.get(var) {
+            match (*state).values.get(&var) {
                 Some(v) => Ok(v.clone()),
                 _ => return Err(InterpreterErrorMessage {
                     error: InterpreterError::VariableNotFound(var.clone()),
@@ -159,7 +163,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             }
         },
         ast::Expression::Typecheck { expression, expected_type } => {
-            let value = eval_expression(state, &expression, program)?;
+            let value = eval_expression(state, *expression, program)?;
 
             return Ok(Value::Bool( match (value, expected_type) {
                 (Value::Int(_), ast::Type::Int) 
@@ -172,8 +176,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             }));
         },
         ast::Expression::BinaryOperation { operator, left, right } => {
-            let left_value = eval_expression(state, &left, program)?;
-            let right_value = eval_expression(state, &right, program)?;
+            let left_value = eval_expression(state, *left.clone(), program)?;
+            let right_value = eval_expression(state, *right.clone(), program)?;
             match operator {
                 ast::BinOperator::Add  => {
                     match (left_value.clone(), right_value) {
@@ -302,7 +306,7 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             }
         },
         ast::Expression::UnaryOperation { operator, expression } => {
-            let value = eval_expression(state, &expression, program)?;
+            let value = eval_expression(state, *expression.clone(), program)?;
 
             match operator {
                 ast::UnOperator::Neg => {
@@ -361,8 +365,14 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
                 }
             }
         },
-        ast::Expression::FunctionCall { function_name, arguments } => {
-            let function = match program.functions.get(function_name) {
+        ast::Expression::FunctionCall { 
+            function_name,
+            positional_arguments,
+            variadic_argument,
+            keyword_arguments,
+            keyword_variadic_argument 
+        } => {
+            let function = match program.functions.get(&function_name) {
                 Some(f) => f,
                 _ => return Err(InterpreterErrorMessage {
                     error: InterpreterError::VariableNotFound(function_name.clone()),
@@ -371,12 +381,97 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             };
 
             let argument_values: Result<Vec<Value>, InterpreterErrorMessage>
-                = arguments.iter().map(|arg| eval_expression(state, arg, program)).collect();
-            let argument_values: Vec<Value> = argument_values?;
+                = positional_arguments.iter().map(|arg| eval_expression(state, *arg.expression.clone(), program)).collect();
+
+            let mut argument_values: Vec<Value> = argument_values?;
+
+            match &variadic_argument {
+                Some(arg) => {
+                    let value = eval_expression(state, *arg.expression.clone(), program)?;
+                    let extra_args: &Vec<Value> = match value {
+                        Value::Tuple { ref elements } => elements,
+                        Value::ListReference { ref elements_ref } => &elements_ref.borrow(),
+                        x => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::InvalidType(x, "iterable".to_string(), "Only tuples or list can be passed as variadic arguments".to_string()),
+                            range: Some(arg.loc.clone())
+                        })
+                    };
+                    argument_values.extend(extra_args.clone());
+                },
+                _ => ()
+            }
+
+            let keyword_values: Result<HashMap<String, Value>, InterpreterErrorMessage> = keyword_arguments.iter()
+                .map(|arg| {
+                    eval_expression(state, *arg.expression.clone(), program).map(|value| (arg.name.clone(), value))
+                })
+                .collect();
+
+            let mut keyword_values: HashMap<String, Value> = keyword_values?;
+
+            match keyword_variadic_argument {
+                Some(arg) => {
+                    let value = eval_expression(state, *arg.expression, program)?;
+                    match value {
+                        Value::DictionaryReference { ref index_ref } => {
+                            for (key, value) in index_ref.borrow().iter() {
+                                match key {
+                                    Value::String(s) => {
+                                        if !keyword_values.contains_key(s) {
+                                            keyword_values.insert(s.clone(), value.clone());
+                                        }
+                                    },
+                                    x => return Err(InterpreterErrorMessage {
+                                        error: InterpreterError::InvalidType(x.clone(), "string".to_string(), "A dict passed as keyword variadic needs to only contain string as keys".to_string()),
+                                        range: Some(arg.loc.clone())
+                                    })                               
+                                }
+                            }
+                        },
+                        x => return Err(InterpreterErrorMessage {
+                            error: InterpreterError::InvalidType(x, "dict".to_string(), "Only dict can be passed as keyword variadic arguments".to_string()),
+                            range: Some(arg.loc.clone())
+                        })
+                    };
+                },
+                _ => ()
+            }
+
+            if argument_values.len() < function.positional_arguments.len() {
+                let pos = argument_values.len();
+                let missing_arg = function.positional_arguments.get(pos).unwrap();
+                return Err(InterpreterErrorMessage {
+                    error: InterpreterError::MissingArgument(missing_arg.name.clone()),
+                    range: Some(missing_arg.loc.clone())
+                })
+            }
+
+            if function.variadic_argument.is_none() && argument_values.len() > function.positional_arguments.len() {
+                let pos = function.positional_arguments.len();
+                
+                let extra_arg_expression = match pos < positional_arguments.len() {
+                    true => positional_arguments.get(pos).unwrap(),
+                    false => &variadic_argument.clone().unwrap()
+                };
+
+                return Err(InterpreterErrorMessage {
+                    error: InterpreterError::UnexpectedArgument(*extra_arg_expression.expression.clone()),
+                    range: Some(extra_arg_expression.loc.clone())
+                })
+            }
+
+            let mut new_values: HashMap<String, Value> = function.positional_arguments.clone().into_iter().zip(argument_values.clone().into_iter()).map(|(arg, value)| (arg.name, value)).collect();
+
+            if argument_values.len() > function.positional_arguments.len() {
+                // from previous logic the only way this happens if we have a variadic accepting argument in the function
+                let extra_args = &argument_values[function.positional_arguments.len()..];
+                new_values.insert(function.variadic_argument.clone().unwrap().name, Value::ListReference { elements_ref: Rc::new(RefCell::new(extra_args.to_vec()))});
+            }
+            
 
             state.stack.push(state.values.clone());
 
-            let new_values: HashMap<String, Value> = function.positional_arguments.clone().into_iter().zip(argument_values.into_iter()).map(|(arg, value)| (arg.name, value)).collect();
+            
             state.values = new_values;
             state.return_value = None;
 
@@ -384,13 +479,13 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
         },
         ast::Expression::TupleDefinition { elements } => {
             let values: Result<Vec<Value>, InterpreterErrorMessage>
-                = elements.iter().map(|arg| eval_expression(state, arg, program)).collect();
+                = elements.into_iter().map(|arg| eval_expression(state, arg, program)).collect();
             let values: Vec<Value> = values?;
             Ok(Value::Tuple { elements: values })
         },
         ast::Expression::ListDefinition { elements } => {
             let values: Result<Vec<Value>, InterpreterErrorMessage>
-                = elements.iter().map(|arg| eval_expression(state, arg, program)).collect();
+                = elements.into_iter().map(|arg| eval_expression(state, arg, program)).collect();
             let values: Vec<Value> = values?;
             Ok(Value::ListReference { elements_ref: Rc::new(RefCell::new(values)) })
         },
@@ -398,8 +493,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             let mut map: HashMap<Value, Value> = HashMap::new();
 
             for (key, value) in elements {
-                let key = eval_expression(state, &key, program)?;
-                let value = eval_expression(state, &value, program)?;
+                let key = eval_expression(state, key, program)?;
+                let value = eval_expression(state, value, program)?;
 
                 map.insert(key, value);
             }
@@ -407,8 +502,8 @@ pub fn eval_expression(state: &mut InterpreterState, expression: &ast::LocExpres
             Ok(Value::DictionaryReference { index_ref: Rc::new(RefCell::new(map)) })
         },
         ast::Expression::Indexing { indexed, indexer } => {
-            let original_indexed_value = eval_expression(state, &indexed, program)?;
-            let original_indexer_value = eval_expression(state, &indexer, program)?;
+            let original_indexed_value = eval_expression(state, *indexed.clone(), program)?;
+            let original_indexer_value = eval_expression(state, *indexer.clone(), program)?;
 
             if let Value::DictionaryReference { ref index_ref } = original_indexed_value {
                 match index_ref.borrow().get(&original_indexer_value) {
@@ -477,18 +572,18 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
         ast::Statement::Assignment {target, expression} => {
             match target.expression {
                 ast::Expression::Variable(variable) => {
-                    let v = eval_expression(state, &expression, program)?;
+                    let v = eval_expression(state, expression, program)?;
                     state.values.entry(variable).and_modify(|value| *value = v.clone()).or_insert(v);
                     Ok(None)
                 },
                 ast::Expression::Indexing { indexed, indexer } => {
-                    let indexer_value = eval_expression(state, &indexer, program)?;
+                    let indexer_value = eval_expression(state, *indexer.clone(), program)?;
 
                    
                     let original_indexed_value =  match indexed.expression {
                         ast::Expression::Variable(_)
                         | ast::Expression::Indexing { .. } => {
-                            eval_expression(state, &indexed, program)?
+                            eval_expression(state, *indexed.clone(), program)?
                         }
                         x => return Err(InterpreterErrorMessage {
                             error: InterpreterError::InvalidLHS(x, "Can only assign to variables or indexing".to_string()),
@@ -510,7 +605,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
                                 indexer_value = (indexed_value.borrow().len() as i64) - 2 - indexer_value;
                             }
 
-                            let value = eval_expression(state, &expression, program)?;
+                            let value = eval_expression(state, expression, program)?;
 
                             let indexer = indexer_value as usize;
 
@@ -526,7 +621,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
                             Ok(None)
                         },
                         Value::DictionaryReference { index_ref: ref indexed } => {
-                            let value = eval_expression(state, &expression, program)?;
+                            let value = eval_expression(state, expression, program)?;
 
                             match indexer_value {
                                 Value::Int(_)
@@ -555,7 +650,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
             }
         },
         ast::Statement::Return { expression } => {
-            match eval_expression(state, &expression, program) {
+            match eval_expression(state, expression, program) {
                 Ok(v) => {
                     state.return_value = Some(v.clone());
                     match state.stack.pop() {
@@ -573,7 +668,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
             }
         },
         ast::Statement::IfElse { condition, if_body, else_body } => {
-            let eval_condition = eval_expression(state, &condition, program)?;
+            let eval_condition = eval_expression(state, condition.clone(), program)?;
 
             match eval_condition {
                 Value::Bool(b) => {
@@ -592,7 +687,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
             }
         },
         ast::Statement::While { ref condition, ref body } => {
-            let eval_condition = eval_expression(state, &condition, program)?;
+            let eval_condition = eval_expression(state, condition.clone(), program)?;
 
             let mut cond = match eval_condition {
                 Value::Bool(b) => b,
@@ -607,7 +702,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
             while cond  {
                 interpret_body(state, &body, program)?;
 
-                let eval_condition = eval_expression(state, &condition, program)?;
+                let eval_condition = eval_expression(state, condition.clone(), program)?;
                 cond = match eval_condition {
                     Value::Bool(b) => b,
                     x => {
@@ -626,7 +721,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
             let original_indexed =  match target.expression {
                 ast::Expression::Variable(_)
                 | ast::Expression::Indexing { .. } => {
-                    eval_expression(state, &target, program)?
+                    eval_expression(state, target, program)?
                 }
                 x => return Err(InterpreterErrorMessage {
                     error: InterpreterError::InvalidLHS(x, "Can only append to variables and indexing".to_string()),
@@ -642,7 +737,7 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: ast::LocStatement
                 })
             };
 
-            let value = eval_expression(state, &appended, program)?;
+            let value = eval_expression(state, appended, program)?;
 
             indexed
                 .borrow_mut()

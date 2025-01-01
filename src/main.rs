@@ -10,5 +10,5 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(pub parser); // synthesized by LALRPOP
 
 pub fn main() {
-    runner::run("programs/strings".to_string());
+    runner::run("programs/variadic".to_string());
 }

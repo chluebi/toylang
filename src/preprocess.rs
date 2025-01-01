@@ -96,13 +96,92 @@ fn process_expression(expr: parse_ast::Expression) -> Result<ast::Expression, Pr
             })
         }
         parse_ast::Expression::FunctionCall { function_name, arguments } => {
-            let mut processed_args = Vec::new();
+            let mut positional_arguments = Vec::new();
+            let mut variadic_argument: Option<ast::CallArgument> = None;
+            let mut keyword_arguments = Vec::new();
+            let mut keyword_variadic_argument: Option<ast::CallArgument> = None;
+        
             for arg in arguments {
-                processed_args.push(process_loc_expression(arg)?);
+                match arg.argument {
+                    parse_ast::CallArgument::PositionalArgument(expr) => {
+                        if !variadic_argument.is_none() || !keyword_arguments.is_empty() || !keyword_variadic_argument.is_none() {
+                            return Err(PreprocessingErrorMessage {
+                                error: PreprocessingError::FunctionProcessingError(
+                                    String::from("Unexpected Positional Argument")
+                                ),
+                                loc: Some(arg.loc),
+                            });
+                        }
+        
+                        positional_arguments.push(ast::CallArgument {
+                            expression: Box::new(process_loc_expression(expr)?),
+                            loc: arg.loc.clone(),
+                        });
+                    }
+                    parse_ast::CallArgument::Variadic(expr) => {
+                        if !keyword_arguments.is_empty() || !keyword_variadic_argument.is_none() {
+                            return Err(PreprocessingErrorMessage {
+                                error: PreprocessingError::FunctionProcessingError(
+                                    String::from("Unexpected Variadic Argument")
+                                ),
+                                loc: Some(arg.loc),
+                            });
+                        }
+        
+                        if variadic_argument.is_none() {
+                            variadic_argument = Some(ast::CallArgument {
+                                expression: Box::new(process_loc_expression(expr)?),
+                                loc: arg.loc.clone(),
+                            });
+                        } else {
+                            return Err(PreprocessingErrorMessage {
+                                error: PreprocessingError::FunctionProcessingError(
+                                    String::from("Duplicate variadic argument")
+                                ),
+                                loc: Some(arg.loc),
+                            });
+                        }
+                    }
+                    parse_ast::CallArgument::KeywordArgument(name, expression) => {
+                        if !keyword_variadic_argument.is_none() {
+                            return Err(PreprocessingErrorMessage {
+                                error: PreprocessingError::FunctionProcessingError(
+                                    String::from("Unexpected Keyword Argument")
+                                ),
+                                loc: Some(arg.loc),
+                            });
+                        }
+        
+                        keyword_arguments.push(ast::CallKeywordArgument {
+                            name: name.clone(),
+                            expression: Box::new(process_loc_expression(expression)?),
+                            loc: arg.loc.clone(),
+                        });
+                    }
+                    parse_ast::CallArgument::KeywordVariadic(expr) => {
+                        if keyword_variadic_argument.is_none() {
+                            keyword_variadic_argument = Some(ast::CallArgument {
+                                expression: Box::new(process_loc_expression(expr)?),
+                                loc: arg.loc.clone(),
+                            });
+                        } else {
+                            return Err(PreprocessingErrorMessage {
+                                error: PreprocessingError::FunctionProcessingError(
+                                    String::from("Duplicate keyword variadic argument")
+                                ),
+                                loc: Some(arg.loc),
+                            });
+                        }
+                    }
+                }
             }
+
             Ok(ast::Expression::FunctionCall {
                 function_name,
-                arguments: processed_args,
+                positional_arguments: positional_arguments,
+                variadic_argument: variadic_argument,
+                keyword_arguments: keyword_arguments,
+                keyword_variadic_argument: keyword_variadic_argument
             })
         }
         parse_ast::Expression::TupleDefinition { elements } => {
