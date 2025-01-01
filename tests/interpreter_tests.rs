@@ -1,16 +1,5 @@
-use std::fs::File;
-use std::io::{self, Read};
-
+use toylang::runner;
 use toylang::interpreter;
-use toylang::parser;
-use toylang::ast;
-
-fn read_file(file_path: &str) -> io::Result<String> {
-    let mut file = File::open(file_path)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
 
 #[cfg(test)]
 mod tests {
@@ -18,139 +7,95 @@ mod tests {
 
     #[test]
     fn recursive_fib() {
-        let program_text = read_file("programs/recursive_fib").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(4181) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/recursive_fib".to_string()) {
+            Ok(interpreter::Value::Int(4181)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn factorial() {
-        let program_text = read_file("programs/factorial").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(3628800) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/factorial".to_string()) {
+            Ok(interpreter::Value::Int(3628800)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn collatz() {
-        let program_text = read_file("programs/collatz").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(1) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/collatz".to_string()) {
+            Ok(interpreter::Value::Int(1)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn square() {
-        let program_text = read_file("programs/square").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Bool(true) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/square".to_string()) {
+            Ok(interpreter::Value::Bool(true)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn tuples() {
-        let program_text = read_file("programs/tuples").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(4950) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/tuples".to_string()) {
+            Ok(interpreter::Value::Int(4950)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn lists() {
-        let program_text = read_file("programs/lists").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(9900) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/lists".to_string()) {
+            Ok(interpreter::Value::Int(9900)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn circular() {
-        let program_text = read_file("programs/circular").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(1) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/circular".to_string()) {
+            Ok(interpreter::Value::Int(1)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn powerset() {
-        let program_text = read_file("programs/powerset").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        interpreter::interpret(&program.unwrap()).unwrap();
-
-        assert!(true)
+        // runner::eval returns a Result. We are only checking if it doesn't error.
+        runner::eval("programs/powerset".to_string()).unwrap();
+        assert!(true);
     }
 
     #[test]
     fn typecheck() {
-        let program_text = read_file("programs/typecheck").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        interpreter::interpret(&program.unwrap()).unwrap();
-
-        assert!(true)
+        // runner::eval returns a Result. We are only checking if it doesn't error.
+        runner::eval("programs/typecheck".to_string()).unwrap();
+        assert!(true);
     }
 
     #[test]
     fn treesum() {
-        let program_text = read_file("programs/treesum").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(11) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/treesum".to_string()) {
+            Ok(interpreter::Value::Int(11)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn mmult() {
-        let program_text = read_file("programs/mmult").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(1884) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/mmult".to_string()) {
+            Ok(interpreter::Value::Int(1884)) => assert!(true),
+            _ => assert!(false),
         }
     }
 
     #[test]
     fn forloop() {
-        let program_text = read_file("programs/forloop").unwrap();
-        let program = parser::GrammarParser::new().parse(&program_text);
-        let res = interpreter::interpret(&program.unwrap()).unwrap();
-
-        match res {
-            interpreter::Value::Int(2047) => assert!(true),
-            _ => assert!(false)
+        match runner::eval("programs/forloop".to_string()) {
+            Ok(interpreter::Value::Int(2047)) => assert!(true),
+            _ => assert!(false),
         }
     }
 }
