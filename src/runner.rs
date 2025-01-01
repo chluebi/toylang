@@ -4,6 +4,7 @@ use std::str;
 
 use crate::parser;
 use crate::interpreter;
+use crate::preprocess;
 
 
 fn get_error_snippet(source: &str, start: usize, end: usize) -> String {
@@ -48,14 +49,16 @@ fn read_file(file_path: &str) -> io::Result<String> {
 pub fn eval(path: String) -> Result<interpreter::Value, interpreter::InterpreterErrorMessage> {
     let program_text = read_file(&path).unwrap();
     let program = parser::GrammarParser::new().parse(&program_text);
-    interpreter::interpret(&program.unwrap())
+    let program = preprocess::process_program(program.unwrap());
+    interpreter::interpret(&program)
 }
 
 
 pub fn run(path: String) -> () {
     let program_text = read_file(&path).unwrap();
     let program = parser::GrammarParser::new().parse(&program_text);
-    match interpreter::interpret(&program.unwrap()) {
+    let program = preprocess::process_program(program.unwrap());
+    match interpreter::interpret(&program) {
         Ok(v) => println!("Program Executed with result {}", v),
         Err(e) => {
             match e.range.clone() {

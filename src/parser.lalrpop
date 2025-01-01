@@ -1,20 +1,20 @@
 use std::str::FromStr;
 use std::collections::HashMap;
 
-use crate::ast;
+use crate::parse_ast;
 
 grammar;
 
 // The entry point of the grammar
-pub Grammar: ast::Program = {
+pub Grammar: parse_ast::Program = {
     <fs:Functions> => {
-        ast::Program {
+        parse_ast::Program {
             functions: fs
         }
     }
 };
 
-Functions: HashMap<String, ast::Function> = {
+Functions: HashMap<String, parse_ast::Function> = {
     <fs:Functions> <f:Function> => {
         let mut funcs = fs;
         funcs.insert(f.name.clone(), f);
@@ -27,9 +27,9 @@ Functions: HashMap<String, ast::Function> = {
     }
 };
 
-Function: ast::Function = {
+Function: parse_ast::Function = {
     <start: @L> <name:Ident> "(" <args:Arguments> ")" <end: @R> "{" <body:Body> "}" => {
-        ast::Function {
+        parse_ast::Function {
             name: name,
             arguments: args,
             body: body,
@@ -39,7 +39,7 @@ Function: ast::Function = {
 };
 
 
-Arguments: Vec<ast::Argument> = {
+Arguments: Vec<parse_ast::LocArgument> = {
     <arg:Argument> "," <args:Arguments> => {
         let mut args = args;
         args.insert(0, arg);
@@ -50,24 +50,24 @@ Arguments: Vec<ast::Argument> = {
 };
 
 
-Argument: ast::Argument = {
-     <start: @L> <i:Ident> <end: @R> => ast::Argument{
-        name: i,
+Argument: parse_ast::LocArgument = {
+     <start: @L> <i:Ident> <end: @R> => parse_ast::LocArgument{
+        argument: parse_ast::Argument::PositionalArgument(i),
         loc: start..end
      },
 };
 
 
-Body: ast::Body = {
+Body: parse_ast::Body = {
     <stmts:Statements> => {
-        ast::Body {
+        parse_ast::Body {
             statements: stmts
         }
     },
 };
 
 
-Statements: Vec<ast::LocStatement> = {
+Statements: Vec<parse_ast::LocStatement> = {
     <stmt:Statement> ";" <stmts:Statements> => {
         let mut stmts = stmts;
         stmts.insert(0, stmt);
@@ -83,11 +83,11 @@ Statements: Vec<ast::LocStatement> = {
 };
 
 
-ControlFlow: Vec<ast::LocStatement> = {
+ControlFlow: Vec<parse_ast::LocStatement> = {
     <start: @L> "if" <c:Expression> <end: @R> "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
         vec![
-            ast::LocStatement {
-                statement: ast::Statement::IfElse {
+            parse_ast::LocStatement {
+                statement: parse_ast::Statement::IfElse {
                     condition: c,
                     if_body: if_body,
                     else_body: else_body
@@ -98,8 +98,8 @@ ControlFlow: Vec<ast::LocStatement> = {
     },
     <start: @L> "while" <c:Expression> <end: @R>  "{" <b:Body> "}" => {
         vec![
-            ast::LocStatement {
-                statement: ast::Statement::While {
+            parse_ast::LocStatement {
+                statement: parse_ast::Statement::While {
                     condition: c,
                     body: b
                 },
@@ -112,10 +112,10 @@ ControlFlow: Vec<ast::LocStatement> = {
         let mut body = body;
         body.extend(step);
         stmts.push(
-            ast::LocStatement {
-                statement: ast::Statement::While {
+            parse_ast::LocStatement {
+                statement: parse_ast::Statement::While {
                     condition: c,
-                    body: ast::Body {
+                    body: parse_ast::Body {
                         statements: body
                     }
                 },
@@ -127,10 +127,10 @@ ControlFlow: Vec<ast::LocStatement> = {
 }
 
 
-Statement: ast::LocStatement = {
+Statement: parse_ast::LocStatement = {
     <start: @L> <t:LHSExpression> "=" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t,
                 expression: e
             },
@@ -138,8 +138,8 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> <t:LHSExpression> "[" "]" "=" <value:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::ListAppend {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::ListAppend {
                 target: t,
                 value: value
             },
@@ -147,8 +147,8 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> "return" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Return {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Return {
                 expression: e
             },
             loc: start..end
@@ -156,12 +156,12 @@ Statement: ast::LocStatement = {
     },
 
     <start: @L> <t:LHSExpression> "+=" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Add,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Add,
                         left: Box::new(t),
                         right: Box::new(e)
                     },
@@ -172,12 +172,12 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> <t:LHSExpression> "-=" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Sub,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Sub,
                         left: Box::new(t),
                         right: Box::new(e)
                     },
@@ -188,12 +188,12 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> <t:LHSExpression> "*=" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Mul,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Mul,
                         left: Box::new(t),
                         right: Box::new(e)
                     },
@@ -204,12 +204,12 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> <t:LHSExpression> "/=" <e:Expression> <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Div,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Div,
                         left: Box::new(t),
                         right: Box::new(e)
                     },
@@ -221,15 +221,15 @@ Statement: ast::LocStatement = {
     },
 
     <start: @L> <t:LHSExpression> "++" <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Add,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Add,
                         left: Box::new(t),
-                        right: Box::new(ast::LocExpression { 
-                            expression: ast::Expression::IntLiteral(1),
+                        right: Box::new(parse_ast::LocExpression { 
+                            expression: parse_ast::Expression::IntLiteral(1),
                             loc: start..end
                         })
                     },
@@ -240,15 +240,15 @@ Statement: ast::LocStatement = {
         }
     },
     <start: @L> <t:LHSExpression> "--" <end: @R> => {
-        ast::LocStatement {
-            statement: ast::Statement::Assignment {
+        parse_ast::LocStatement {
+            statement: parse_ast::Statement::Assignment {
                 target: t.clone(),
-                expression: ast::LocExpression {
-                    expression: ast::Expression::BinaryOperation {
-                        operator: ast::BinOperator::Sub,
+                expression: parse_ast::LocExpression {
+                    expression: parse_ast::Expression::BinaryOperation {
+                        operator: parse_ast::BinOperator::Sub,
                         left: Box::new(t),
-                        right: Box::new(ast::LocExpression { 
-                            expression: ast::Expression::IntLiteral(1),
+                        right: Box::new(parse_ast::LocExpression { 
+                            expression: parse_ast::Expression::IntLiteral(1),
                             loc: start..end
                         })
                     },
@@ -260,13 +260,13 @@ Statement: ast::LocStatement = {
     }
 };
 
-LHSExpression: ast::LocExpression = {
-    <start: @L> <id: Ident> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::Variable(id),
+LHSExpression: parse_ast::LocExpression = {
+    <start: @L> <id: Ident> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::Variable(id),
         loc: start..end
     },
-    <start: @L> <indexed:LHSExpression> "[" <indexer: IndexExpression> "]" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::Indexing {
+    <start: @L> <indexed:LHSExpression> "[" <indexer: IndexExpression> "]" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::Indexing {
             indexed: Box::new(indexed), indexer: Box::new(indexer)
         },
         loc: start..end
@@ -274,182 +274,182 @@ LHSExpression: ast::LocExpression = {
 };
 
 
-Expression: ast::LocExpression = {
+Expression: parse_ast::LocExpression = {
     #[precedence(level="0")]
     Term,
     #[precedence(level="1")] #[assoc(side="left")]
     <start: @L> "(" <e:Expression> "," <elts: CommaSeperatedExpressions> ")" <end: @R> => {
         let mut elts = elts;
         elts.insert(0, e);
-        return ast::LocExpression {
-            expression: ast::Expression::TupleDefinition {elements: elts},
+        return parse_ast::LocExpression {
+            expression: parse_ast::Expression::TupleDefinition {elements: elts},
             loc: start..end
         };
     },
-    <start: @L> "[" <elts: CommaSeperatedExpressions> "]" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::ListDefinition {elements: elts},
+    <start: @L> "[" <elts: CommaSeperatedExpressions> "]" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::ListDefinition {elements: elts},
         loc: start..end
     },
-    <start: @L> "{" <elts: CommaSeperatedMappings> "}" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::DictionaryDefinition {elements: elts},
+    <start: @L> "{" <elts: CommaSeperatedMappings> "}" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::DictionaryDefinition {elements: elts},
         loc: start..end
     },
-    <start: @L> <indexed: Expression> "[" <indexer: IndexExpression> "]" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::Indexing {
+    <start: @L> <indexed: Expression> "[" <indexer: IndexExpression> "]" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::Indexing {
             indexed: Box::new(indexed), indexer: Box::new(indexer)
         },
         loc: start..end
     },
-    <start: @L> <id:Ident> "(" <args:CommaSeperatedExpressions> ")" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::FunctionCall {
+    <start: @L> <id:Ident> "(" <args:CommaSeperatedExpressions> ")" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::FunctionCall {
             function_name: id,
             arguments: args
         },
         loc: start..end
     },
     #[precedence(level="2")] #[assoc(side="left")]
-    <start: @L> "-" <e:Term> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::UnaryOperation {
-            operator: ast::UnOperator::Neg,
+    <start: @L> "-" <e:Term> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::UnaryOperation {
+            operator: parse_ast::UnOperator::Neg,
             expression: Box::new(e),
         },
         loc: start..end
     },
-    <start: @L> "!" <e:Term> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::UnaryOperation {
-            operator: ast::UnOperator::Not,
+    <start: @L> "!" <e:Term> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::UnaryOperation {
+            operator: parse_ast::UnOperator::Not,
             expression: Box::new(e),
         },
         loc: start..end
     },
-    <start: @L> "?" <e:Term> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::UnaryOperation {
-            operator: ast::UnOperator::Length,
+    <start: @L> "?" <e:Term> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::UnaryOperation {
+            operator: parse_ast::UnOperator::Length,
             expression: Box::new(e),
         },
         loc: start..end
     },
     #[precedence(level="3")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "*" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Mul,
+    <start: @L> <l:Expression> "*" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Mul,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "/" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Div,
+    <start: @L> <l:Expression> "/" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Div,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "%" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Mod,
+    <start: @L> <l:Expression> "%" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Mod,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
     #[precedence(level="4")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "+" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Add,
+    <start: @L> <l:Expression> "+" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Add,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "-" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Sub,
+    <start: @L> <l:Expression> "-" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Sub,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
     #[precedence(level="5")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "++" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::ListConcat,
+    <start: @L> <l:Expression> "++" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::ListConcat,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
     #[precedence(level="6")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "??" <r:Type> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::Typecheck {
+    <start: @L> <l:Expression> "??" <r:Type> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::Typecheck {
             expression: Box::new(l),
             expected_type: r
         },
         loc: start..end
     },
     #[precedence(level="7")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "&&" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::And,
+    <start: @L> <l:Expression> "&&" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::And,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
     #[precedence(level="8")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "||" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Or,
+    <start: @L> <l:Expression> "||" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Or,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
     #[precedence(level="9")] #[assoc(side="left")]
-    <start: @L> <l:Expression> "==" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Eq,
+    <start: @L> <l:Expression> "==" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Eq,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "!=" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Neq,
+    <start: @L> <l:Expression> "!=" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Neq,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "<" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Lt,
+    <start: @L> <l:Expression> "<" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Lt,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> ">" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Gt,
+    <start: @L> <l:Expression> ">" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Gt,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> "<=" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Leq,
+    <start: @L> <l:Expression> "<=" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Leq,
             left: Box::new(l),
             right: Box::new(r)
         },
         loc: start..end
     },
-    <start: @L> <l:Expression> ">=" <r:Expression> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BinaryOperation {
-            operator: ast::BinOperator::Geq,
+    <start: @L> <l:Expression> ">=" <r:Expression> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BinaryOperation {
+            operator: parse_ast::BinOperator::Geq,
             left: Box::new(l),
             right: Box::new(r)
         },
@@ -457,32 +457,32 @@ Expression: ast::LocExpression = {
     },
 }
 
-IndexExpression: ast::LocExpression = {
+IndexExpression: parse_ast::LocExpression = {
     Expression
 }
 
-Term: ast::LocExpression = {
-    <start: @L> "true" <end: @R> => ast::LocExpression {
-        expression: ast::Expression::BoolLiteral(true),
+Term: parse_ast::LocExpression = {
+    <start: @L> "true" <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::BoolLiteral(true),
         loc: start..end
     },
-    <start: @L> "false" <end: @R> => ast::LocExpression { 
-        expression: ast::Expression::BoolLiteral(false),
+    <start: @L> "false" <end: @R> => parse_ast::LocExpression { 
+        expression: parse_ast::Expression::BoolLiteral(false),
         loc: start..end
     },
-    <start: @L> <n:Num> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::IntLiteral(n),
+    <start: @L> <n:Num> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::IntLiteral(n),
         loc: start..end
     },
-    <start: @L> <id: Ident> <end: @R> => ast::LocExpression {
-        expression: ast::Expression::Variable(id),
+    <start: @L> <id: Ident> <end: @R> => parse_ast::LocExpression {
+        expression: parse_ast::Expression::Variable(id),
         loc: start..end
     },
     "(" <e: Expression> ")" => e
 }
 
 
-CommaSeperatedExpressions: Vec<ast::LocExpression> = {
+CommaSeperatedExpressions: Vec<parse_ast::LocExpression> = {
     <exp:Expression> "," <exps:CommaSeperatedExpressions> => {
         let mut exps = exps;
         exps.insert(0, exp);
@@ -492,7 +492,7 @@ CommaSeperatedExpressions: Vec<ast::LocExpression> = {
     => vec![]
 }
 
-CommaSeperatedMappings: Vec<(ast::LocExpression, ast::LocExpression)> = {
+CommaSeperatedMappings: Vec<(parse_ast::LocExpression, parse_ast::LocExpression)> = {
     <m:Mapping> "," <mappings:CommaSeperatedMappings> => {
         let mut mappings = mappings;
         mappings.insert(0, m);
@@ -502,15 +502,15 @@ CommaSeperatedMappings: Vec<(ast::LocExpression, ast::LocExpression)> = {
     => vec![]
 }
 
-Mapping: (ast::LocExpression, ast::LocExpression) = {
+Mapping: (parse_ast::LocExpression, parse_ast::LocExpression) = {
     <key:Expression> ":" <value:Expression> => (key, value)
 }
 
-Type: ast::Type = {
-    "int" => ast::Type::Int,
-    "bool" => ast::Type::Bool,
-    "tuple" => ast::Type::Tuple,
-    "list" => ast::Type::List
+Type: parse_ast::Type = {
+    "int" => parse_ast::Type::Int,
+    "bool" => parse_ast::Type::Bool,
+    "tuple" => parse_ast::Type::Tuple,
+    "list" => parse_ast::Type::List
 }
 
 
