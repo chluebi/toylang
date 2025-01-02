@@ -96,6 +96,20 @@ Statements: Vec<parse_ast::LocStatement> = {
 
 
 ControlFlow: Vec<parse_ast::LocStatement> = {
+    <start: @L> "if" <c:Expression> <end: @R> "{" <if_body:Body> "}"  => {
+        vec![
+            parse_ast::LocStatement {
+                statement: parse_ast::Statement::IfElse {
+                    condition: c,
+                    if_body: if_body,
+                    else_body: parse_ast::Body {
+                        statements: vec![]
+                    }
+                },
+                loc: start..end
+            }
+        ]
+    },
     <start: @L> "if" <c:Expression> <end: @R> "{" <if_body:Body> "}" "else" "{" <else_body:Body> "}"  => {
         vec![
             parse_ast::LocStatement {
@@ -103,6 +117,20 @@ ControlFlow: Vec<parse_ast::LocStatement> = {
                     condition: c,
                     if_body: if_body,
                     else_body: else_body
+                },
+                loc: start..end
+            }
+        ]
+    },
+    <start: @L> "if" <c:Expression> <end: @R> "{" <if_body:Body> "}" "else" <next_cf:ControlFlow>  => {
+        vec![
+            parse_ast::LocStatement {
+                statement: parse_ast::Statement::IfElse {
+                    condition: c,
+                    if_body: if_body,
+                    else_body: parse_ast::Body {
+                        statements: next_cf
+                    }
                 },
                 loc: start..end
             }

@@ -102,6 +102,8 @@ pub fn run(path: String) -> () {
         }
     };
 
+    println!("{}", program);
+
 
     match interpreter::interpret(&program) {
         Ok(v) => println!("Program Executed with result {}", v),

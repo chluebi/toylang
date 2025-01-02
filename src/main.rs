@@ -10,5 +10,5 @@ use lalrpop_util::lalrpop_mod;
 lalrpop_mod!(pub parser); // synthesized by LALRPOP
 
 pub fn main() {
-    runner::run("programs/ret_in_loop".to_string());
+    runner::run("programs/else_if".to_string());
 }

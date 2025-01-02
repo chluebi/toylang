@@ -122,4 +122,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn else_if() {
+        match runner::eval("programs/else_if".to_string()) {
+            Ok(interpreter::Value::Int(25)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }
