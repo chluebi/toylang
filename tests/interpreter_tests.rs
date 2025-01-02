@@ -114,4 +114,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn ret_in_loop() {
+        match runner::eval("programs/ret_in_loop".to_string()) {
+            Ok(interpreter::Value::Int(50)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }
