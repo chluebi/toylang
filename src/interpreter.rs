@@ -388,24 +388,6 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                     };
 
                     return Ok(Value::Bool(res));
-                },
-                ast::UnOperator::Length => {
-                    let evaled = match value {
-                        Value::ListReference { elements_ref } => Ok(elements_ref),
-                        x => Err(
-                            InterpreterErrorMessage {
-                                error: InterpreterError::InvalidType(x, "list".to_string(), "".to_string()),
-                                range: Some(expression.loc.clone())
-                            }
-                        )
-                    }?;
-
-                    let res = match operator {
-                        ast::UnOperator::Length => evaled.borrow().len() as i64,
-                        _ => unreachable!("This should never be reached")
-                    };
-
-                    return Ok(Value::Int(res));
                 }
             }
         },

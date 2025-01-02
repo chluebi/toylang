@@ -66,7 +66,6 @@ fn process_un_operator(op: parse_ast::UnOperator) -> Result<ast::UnOperator, Pre
     match op {
         parse_ast::UnOperator::Neg => Ok(ast::UnOperator::Neg),
         parse_ast::UnOperator::Not => Ok(ast::UnOperator::Not),
-        parse_ast::UnOperator::Length => Ok(ast::UnOperator::Length),
     }
 }
 

@@ -1,17 +1,17 @@
 mmult(A, B) {
     C = [];
 
-    for (j = 0; j < ?B; j++) {
+    for (j = 0; j < len(B); j++) {
         C[] = [];
-        for (i = 0; i < ?(A[0]); i++) {
+        for (i = 0; i < len(A[0]); i++) {
             C[-1][] = 0;
         }
     }
 
-    for (i = 0; i < ?(A[0]); i++) {
-        for (j = 0; j < ?B; j++) {
+    for (i = 0; i < len(A[0]); i++) {
+        for (j = 0; j < len(B); j++) {
             s = 0;
-            for (k = 0; k < ?A; k++) {
+            for (k = 0; k < len(A); k++) {
                 s += A[k][i] * B[j][k];
             }
             C[j][i] = s;

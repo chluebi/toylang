@@ -1,19 +1,19 @@
 
 powerset(l, i) {
-    if (i >= ?l) {
+    if (i >= len(l)) {
         return [[]];
     } else {
         without = powerset(l, i+1);
         with = [];
 
         j = 0;
-        while (j < ?without) {
+        while (j < len(without)) {
             with[] = (without[j] ++ []);
             j = j + 1;
         }
 
         j = 0;
-        while (j < ?with) {
+        while (j < len(with)) {
             current = with[j];
             current[] = l[i];
             j = j + 1;

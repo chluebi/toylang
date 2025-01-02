@@ -393,13 +393,6 @@ Expression: parse_ast::LocExpression = {
         },
         loc: start..end
     },
-    <start: @L> "?" <e:Term> <end: @R> => parse_ast::LocExpression {
-        expression: parse_ast::Expression::UnaryOperation {
-            operator: parse_ast::UnOperator::Length,
-            expression: Box::new(e),
-        },
-        loc: start..end
-    },
     #[precedence(level="3")] #[assoc(side="left")]
     <start: @L> <l:Expression> "*" <r:Expression> <end: @R> => parse_ast::LocExpression {
         expression: parse_ast::Expression::BinaryOperation {
@@ -641,7 +634,6 @@ match {
     "%",
     "++",
     "--",
-    "?",
     "??",
     "&&",
     "||",

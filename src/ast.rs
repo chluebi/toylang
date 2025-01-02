@@ -74,15 +74,13 @@ impl fmt::Display for BinOperator {
 pub enum UnOperator {
     Neg,
     Not,
-    Length
 }
 
 impl fmt::Display for UnOperator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnOperator::Neg => write!(f, "-"),
-            UnOperator::Not => write!(f, "!"),
-            UnOperator::Length => write!(f, "?")
+            UnOperator::Not => write!(f, "!")
         }
     }
 }

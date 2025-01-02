@@ -9,7 +9,7 @@ main() {
 
     i = 0;
     s = 0;
-    while (i < ?a) {
+    while (i < len(a)) {
         a[i] = a[i] * 2;
         s = s + a[i];
         i = i + 1;

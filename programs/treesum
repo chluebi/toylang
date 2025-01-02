@@ -2,7 +2,7 @@
 treesum(l) {
     s = 0;
     i = 0;
-    while (i < ?l) {
+    while (i < len(l)) {
         if (l[i] ?? int) {
             s = s + l[i];
         } else {}
