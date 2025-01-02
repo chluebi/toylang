@@ -1,0 +1,7 @@
+f(x, y=2, **kwargs) {
+    return (x + y) * kwargs["z"];
+}
+
+main() {
+    return f(1, y=10, z=30);
+}

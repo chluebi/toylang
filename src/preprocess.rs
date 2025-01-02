@@ -96,12 +96,13 @@ fn process_expression(expr: parse_ast::Expression) -> Result<ast::Expression, Pr
             })
         }
         parse_ast::Expression::FunctionCall { function_name, arguments } => {
-            let mut positional_arguments = Vec::new();
+            let mut positional_arguments: Vec<ast::CallArgument> = Vec::new();
             let mut variadic_argument: Option<ast::CallArgument> = None;
-            let mut keyword_arguments = Vec::new();
+            let mut keyword_arguments: Vec<ast::CallKeywordArgument> = Vec::new();
             let mut keyword_variadic_argument: Option<ast::CallArgument> = None;
         
             for arg in arguments {
+
                 match arg.argument {
                     parse_ast::CallArgument::PositionalArgument(expr) => {
                         if !variadic_argument.is_none() || !keyword_arguments.is_empty() || !keyword_variadic_argument.is_none() {
@@ -150,6 +151,18 @@ fn process_expression(expr: parse_ast::Expression) -> Result<ast::Expression, Pr
                                 ),
                                 loc: Some(arg.loc),
                             });
+                        }
+
+                        match keyword_arguments.iter().filter(|x| x.name == name).collect::<Vec<&ast::CallKeywordArgument>>().get(0) {
+                            Some(other_arg) => {
+                                return Err(PreprocessingErrorMessage {
+                                    error: PreprocessingError::FunctionProcessingError(
+                                        format!("Keyword Argument with name {} already exists", other_arg.name)
+                                    ),
+                                    loc: Some(other_arg.loc.start..arg.loc.end),
+                                });
+                             }
+                            _ => ()
                         }
         
                         keyword_arguments.push(ast::CallKeywordArgument {
@@ -262,12 +275,69 @@ fn process_body(body: parse_ast::Body) -> Result<ast::Body, PreprocessingErrorMe
 }
 
 fn process_function(func: parse_ast::Function) -> Result<ast::Function, PreprocessingErrorMessage> {
-    let mut positional_arguments = Vec::new();
+    let mut positional_arguments: Vec<ast::Argument> = Vec::new();
     let mut variadic_argument: Option<ast::Argument> = None;
-    let mut keyword_arguments = Vec::new();
+    let mut keyword_arguments: Vec<ast::KeywordArgument> = Vec::new();
     let mut keyword_variadic_argument: Option<ast::Argument> = None;
 
     for arg in func.arguments {
+
+        let name = match arg.argument.clone() {
+            parse_ast::Argument::PositionalArgument(name)
+            | parse_ast::Argument::Variadic(name)
+            | parse_ast::Argument::KeywordArgument(name, _)
+            | parse_ast::Argument::KeywordVariadic(name)
+            => name,
+        };
+
+        match positional_arguments.iter().filter(|x| x.name == name).collect::<Vec<&ast::Argument>>().get(0) {
+            Some(other_arg) => {
+                return Err(PreprocessingErrorMessage {
+                    error: PreprocessingError::FunctionProcessingError(
+                        format!("Argument with name {} already exists", other_arg.name)
+                    ),
+                    loc: Some(other_arg.loc.start..arg.loc.end),
+                });
+            },
+            _ => ()
+        }
+
+        match variadic_argument.as_ref().or_else(|| None) {
+            Some(other_arg) => {
+                return Err(PreprocessingErrorMessage {
+                    error: PreprocessingError::FunctionProcessingError(
+                        format!("Argument with name {} already exists", other_arg.name)
+                    ),
+                    loc: Some(other_arg.loc.start..arg.loc.end),
+                });
+            },
+            _ => {}
+        }
+
+        match keyword_arguments.iter().filter(|x| x.name == name).collect::<Vec<&ast::KeywordArgument>>().get(0) {
+            Some(other_arg) => {
+                return Err(PreprocessingErrorMessage {
+                    error: PreprocessingError::FunctionProcessingError(
+                        format!("Argument with name {} already exists", other_arg.name)
+                    ),
+                    loc: Some(other_arg.loc.start..arg.loc.end),
+                });
+            },
+            _ => ()
+        }
+
+        match &keyword_variadic_argument.as_ref().or_else(|| None) {
+            Some(other_arg) => {
+                return Err(PreprocessingErrorMessage {
+                    error: PreprocessingError::FunctionProcessingError(
+                        format!("Argument with name {} already exists", other_arg.name)
+                    ),
+                    loc: Some(other_arg.loc.start..arg.loc.end),
+                });
+            },
+            _ => {}
+        }
+        
         match arg.argument {
             parse_ast::Argument::PositionalArgument(name) => {
                 if !variadic_argument.is_none() || !keyword_arguments.is_empty() || !keyword_variadic_argument.is_none() {

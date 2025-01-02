@@ -416,13 +416,13 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 _ => ()
             }
 
-            let keyword_values: Result<HashMap<String, Value>, InterpreterErrorMessage> = keyword_arguments.iter()
+            let keyword_values: Result<HashMap<String, (Option<&ast::CallKeywordArgument>, Value)>, InterpreterErrorMessage> = keyword_arguments.iter()
                 .map(|arg| {
-                    eval_expression(state, &arg.expression, program).map(|value| (arg.name.clone(), value))
+                    eval_expression(state, &arg.expression, program).map(|value| (arg.name.clone(), (Some(arg), value)))
                 })
                 .collect();
 
-            let mut keyword_values: HashMap<String, Value> = keyword_values?;
+            let mut keyword_values: HashMap<String, (Option<&ast::CallKeywordArgument>, Value)> = keyword_values?;
 
             match keyword_variadic_argument {
                 Some(arg) => {
@@ -433,7 +433,7 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                                 match key {
                                     Value::String(s) => {
                                         if !keyword_values.contains_key(&s.clone()) {
-                                            keyword_values.insert(s.clone(), value.clone());
+                                            keyword_values.insert(s.clone(), (None, value.clone()));
                                         }
                                     },
                                     x => return Err(InterpreterErrorMessage {
@@ -481,6 +481,49 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 // from previous logic the only way this happens if we have a variadic accepting argument in the function
                 let extra_args = &argument_values[function.positional_arguments.len()..];
                 new_values.insert(function.variadic_argument.clone().unwrap().name, Value::ListReference { elements_ref: Rc::new(RefCell::new(extra_args.to_vec()))});
+            }
+
+            let mut keyword_variadic_arguments: HashMap<Value, Value> = HashMap::new();
+
+            for keyword_arg in function.keyword_arguments.clone() {
+                new_values.insert(keyword_arg.name, eval_expression(state, &keyword_arg.expression, program)?);
+            }
+
+            for (key, (arg, value)) in keyword_values {
+                match function.keyword_arguments.iter().filter(|y| y.name == key).peekable().peek() {
+                    Some(_) => {
+                        new_values.insert(key, value);
+                    }
+                    _ => {
+                        match &function.keyword_variadic_argument {
+                            Some(_) => {
+                                keyword_variadic_arguments.insert(Value::String(key), value);
+                            }
+                            _ => match arg {
+                                Some(arg) => {
+                                    return Err(InterpreterErrorMessage {
+                                        error: InterpreterError::UnexpectedArgument(*arg.expression.clone()),
+                                        range: Some(arg.loc.clone())
+                                    })
+                                },
+                                _ => {
+                                    // If we do not have an arg passed this means that it originally came from the keyword_variadic argument
+                                    return Err(InterpreterErrorMessage {
+                                        error: InterpreterError::UnexpectedArgument(*keyword_variadic_argument.as_ref().unwrap().expression.clone()),
+                                        range: Some(keyword_variadic_argument.as_ref().unwrap().loc.clone())
+                                    })
+                                },
+                            }
+                        }
+                    }
+                }
+            }
+
+            match &function.keyword_variadic_argument {
+                Some(arg) => {
+                    new_values.insert(arg.name.clone(), Value::DictionaryReference { index_ref: Rc::new(RefCell::new(keyword_variadic_arguments)) } );
+                },
+                _ => assert!(keyword_variadic_arguments.is_empty())
             }
             
 

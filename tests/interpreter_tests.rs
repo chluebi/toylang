@@ -136,4 +136,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn kwargs() {
+        match runner::eval("programs/kwargs".to_string()) {
+            Ok(interpreter::Value::Int(330)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }
