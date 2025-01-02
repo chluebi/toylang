@@ -414,10 +414,12 @@ fn process_function(func: parse_ast::Function) -> Result<ast::Function, Preproce
 
     Ok(ast::Function {
         name: func.name.clone(),
-        positional_arguments,
-        variadic_argument,
-        keyword_arguments,
-        keyword_variadic_argument,
+        contract: ast::FunctionContract {
+            positional_arguments,
+            variadic_argument,
+            keyword_arguments,
+            keyword_variadic_argument,
+        },
         body: process_body(func.body)?,
         loc: func.loc,
     })

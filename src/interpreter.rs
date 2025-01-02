@@ -5,7 +5,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::fmt;
 
-use crate::ast;
+use crate::{ast, builtins};
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -85,9 +85,38 @@ impl Value {
     }
 }
 
+
+
+#[derive(Debug, Clone)]
+pub enum Function<'a> {
+    UserDefined(&'a ast::Function),
+    Builtin(&'a builtins::BuiltinFunction)
+}
+
+impl<'a> fmt::Display for Function<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UserDefined(function) => write!(f, "{}", function),
+            Self::Builtin(function) => write!(f, "{}", function)
+        }
+    }
+}
+
+
+impl<'a> Function<'a> {
+    pub fn get_contract(&self) -> &ast::FunctionContract {
+        match self {
+            Self::UserDefined(f) => &f.contract,
+            Self::Builtin(f) => &f.contract
+        }
+    }
+}
+
+
+
 type FunctionFrame = HashMap<String, Value>;
 pub struct InterpreterState {
-    values: FunctionFrame
+    pub values: FunctionFrame
 }
 
 impl fmt::Display for InterpreterState {
@@ -97,7 +126,7 @@ impl fmt::Display for InterpreterState {
 }
 
 #[derive(Debug)]
-enum InterpreterError {
+pub enum InterpreterError {
     Panic(String),
     InvalidType(Value, String, String),
     InvalidLHS(ast::Expression, String),
@@ -127,7 +156,7 @@ impl fmt::Display for InterpreterError {
 
 #[derive(Debug)]
 pub struct InterpreterErrorMessage {
-    error: InterpreterError,
+    pub error: InterpreterError,
     pub range: Option<Range<usize>>
 }
 
@@ -388,12 +417,16 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
             ref keyword_variadic_argument 
         } => {
             let function = match program.functions.get(function_name) {
-                Some(f) => f,
-                _ => return Err(InterpreterErrorMessage {
-                    error: InterpreterError::VariableNotFound(function_name.clone()),
-                    range: Some(expression.loc.clone())
-                })
+                Some(f) => Function::UserDefined(f),
+                _ => match builtins::BUILTINS.get(function_name) {
+                    Some(f) => Function::Builtin(f),
+                    _ => return Err(InterpreterErrorMessage {
+                        error: InterpreterError::VariableNotFound(function_name.clone()),
+                        range: Some(expression.loc.clone())
+                    })
+                }
             };
+            let contract = function.get_contract();
 
             let argument_values: Result<Vec<Value>, InterpreterErrorMessage>
                 = positional_arguments.iter().map(|arg| eval_expression(state, &arg.expression, program)).collect();
@@ -452,17 +485,17 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 _ => ()
             }
 
-            if argument_values.len() < function.positional_arguments.len() {
+            if argument_values.len() < contract.positional_arguments.len() {
                 let pos = argument_values.len();
-                let missing_arg = function.positional_arguments.get(pos).unwrap();
+                let missing_arg = contract.positional_arguments.get(pos).unwrap();
                 return Err(InterpreterErrorMessage {
                     error: InterpreterError::MissingArgument(missing_arg.name.clone()),
                     range: Some(missing_arg.loc.clone())
                 })
             }
 
-            if function.variadic_argument.is_none() && argument_values.len() > function.positional_arguments.len() {
-                let pos = function.positional_arguments.len();
+            if contract.variadic_argument.is_none() && argument_values.len() > contract.positional_arguments.len() {
+                let pos = contract.positional_arguments.len();
                 
                 let extra_arg_expression = match pos < positional_arguments.len() {
                     true => positional_arguments.get(pos).unwrap(),
@@ -475,27 +508,27 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 })
             }
 
-            let mut new_values: HashMap<String, Value> = function.positional_arguments.iter().zip(argument_values.iter()).map(|(arg, value)| (arg.name.clone(), value.clone())).collect();
+            let mut new_values: HashMap<String, Value> = contract.positional_arguments.iter().zip(argument_values.iter()).map(|(arg, value)| (arg.name.clone(), value.clone())).collect();
 
-            if argument_values.len() > function.positional_arguments.len() {
+            if argument_values.len() > contract.positional_arguments.len() {
                 // from previous logic the only way this happens if we have a variadic accepting argument in the function
-                let extra_args = &argument_values[function.positional_arguments.len()..];
-                new_values.insert(function.variadic_argument.clone().unwrap().name, Value::ListReference { elements_ref: Rc::new(RefCell::new(extra_args.to_vec()))});
+                let extra_args = &argument_values[contract.positional_arguments.len()..];
+                new_values.insert(contract.variadic_argument.clone().unwrap().name, Value::ListReference { elements_ref: Rc::new(RefCell::new(extra_args.to_vec()))});
             }
 
             let mut keyword_variadic_arguments: HashMap<Value, Value> = HashMap::new();
 
-            for keyword_arg in function.keyword_arguments.clone() {
+            for keyword_arg in contract.keyword_arguments.clone() {
                 new_values.insert(keyword_arg.name, eval_expression(state, &keyword_arg.expression, program)?);
             }
 
             for (key, (arg, value)) in keyword_values {
-                match function.keyword_arguments.iter().filter(|y| y.name == key).peekable().peek() {
+                match contract.keyword_arguments.iter().filter(|y| y.name == key).peekable().peek() {
                     Some(_) => {
                         new_values.insert(key, value);
                     }
                     _ => {
-                        match &function.keyword_variadic_argument {
+                        match &contract.keyword_variadic_argument {
                             Some(_) => {
                                 keyword_variadic_arguments.insert(Value::String(key), value);
                             }
@@ -519,7 +552,7 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 }
             }
 
-            match &function.keyword_variadic_argument {
+            match &contract.keyword_variadic_argument {
                 Some(arg) => {
                     new_values.insert(arg.name.clone(), Value::DictionaryReference { index_ref: Rc::new(RefCell::new(keyword_variadic_arguments)) } );
                 },
@@ -531,7 +564,17 @@ pub fn eval_expression(state: &InterpreterState, expression: &ast::LocExpression
                 values: new_values
             };
 
-            let ret = interpret_function_body(new_state, function, &function_name, program);
+            let ret = match function {
+                Function::UserDefined(function) => interpret_function_body(new_state, &function, &function_name, program),
+                Function::Builtin(function) => {
+                    match (function.function)(&new_state) {
+                        Ok(x) => Ok(x),
+                        Err(InterpreterErrorMessage { error, range: _ }) => {
+                            Err(InterpreterErrorMessage {error: error, range: Some(expression.loc.clone())})
+                        }
+                    }
+                }
+            };
 
             Ok(ret?)
         },

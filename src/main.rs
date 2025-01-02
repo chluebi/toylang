@@ -1,14 +1,17 @@
-mod ast;
-mod parse_ast;
-mod interpreter;
-mod runner;
-mod preprocess;
-
-
 use lalrpop_util::lalrpop_mod;
-
 lalrpop_mod!(pub parser); // synthesized by LALRPOP
 
+mod parse_ast;
+mod ast;
+mod interpreter;
+mod builtins;
+mod preprocess;
+mod runner;
+
+
+
+
+
 pub fn main() {
-    runner::run("programs/kwargs".to_string());
+    runner::run("programs/len".to_string());
 }

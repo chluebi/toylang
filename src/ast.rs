@@ -363,17 +363,15 @@ impl fmt::Display for KeywordArgument {
 
 
 #[derive(Debug, Clone)]
-pub struct Function {
-    pub name: String,
+pub struct FunctionContract {
     pub positional_arguments: Vec<Argument>,
     pub variadic_argument: Option<Argument>,
     pub keyword_arguments: Vec<KeywordArgument>,
-    pub keyword_variadic_argument: Option<Argument>,
-    pub body: Body,
-    pub loc: Range<usize>
+    pub keyword_variadic_argument: Option<Argument>
 }
 
-impl fmt::Display for Function {
+impl fmt::Display for FunctionContract {
+    
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
         let mut i = 0;
@@ -410,7 +408,22 @@ impl fmt::Display for Function {
             i += 1;
         }
 
-        write!(f, ") {{\n{}\n}}", self.body)?;
+        write!(f, ")")
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub name: String,
+    pub contract: FunctionContract,
+    pub body: Body,
+    pub loc: Range<usize>
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {{\n{}\n}}", self.contract, self.body)?;
         Ok(())
     }
 }

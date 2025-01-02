@@ -144,4 +144,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn len() {
+        match runner::eval("programs/len".to_string()) {
+            Ok(interpreter::Value::Int(3)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }
