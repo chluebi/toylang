@@ -62,6 +62,12 @@ mod tests {
     }
 
     #[test]
+    fn circular2() {
+        runner::eval("programs/circular2".to_string()).unwrap();
+        assert!(true);
+    }
+
+    #[test]
     fn powerset() {
         // runner::eval returns a Result. We are only checking if it doesn't error.
         runner::eval("programs/powerset".to_string()).unwrap();

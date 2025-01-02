@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
@@ -14,49 +14,70 @@ pub enum Value {
     Bool(bool),
     String(String),
     Tuple {
-        elements: Vec<Value>
+        elements: Vec<Value>,
     },
     ListReference {
-        elements_ref: Rc<RefCell<Vec<Value>>>
+        elements_ref: Rc<RefCell<Vec<Value>>>,
     },
     DictionaryReference {
-        index_ref: Rc<RefCell<HashMap<Value,Value>>>
-    }
+        index_ref: Rc<RefCell<HashMap<Value, Value>>>,
+    },
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_seen(f, &mut HashSet::new())
+    }
+}
+
+impl Value {
+    fn fmt_with_seen(&self, f: &mut fmt::Formatter<'_>, seen: &mut HashSet<usize>) -> fmt::Result {
         match self {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::String(s) => write!(f, "{}", s),
-            Value::Tuple {elements} => {
+            Value::Tuple { elements } => {
                 write!(f, "(")?;
                 for (i, elt) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", elt)?;
+                    elt.fmt_with_seen(f, seen)?;
                 }
                 write!(f, ")")
-            },
+            }
             Value::ListReference { elements_ref } => {
+                let ptr = elements_ref.as_ptr() as usize;
+                if seen.contains(&ptr) {
+                    return write!(f, "[...]");
+                }
+                seen.insert(ptr);
+
                 write!(f, "[")?;
                 for (i, elt) in elements_ref.borrow().iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", elt)?;
+                    elt.fmt_with_seen(f, seen)?;
                 }
                 write!(f, "]")
-            },
+            }
             Value::DictionaryReference { index_ref } => {
+                let ptr = index_ref.as_ptr() as usize;
+                if seen.contains(&ptr) {
+                    return write!(f, "{{...}}");
+                }
+                seen.insert(ptr);
+
                 write!(f, "{{")?;
-                for (i, (key, value)) in index_ref.borrow().iter().enumerate() {
-                    if i > 0 {
+                let mut first = true;
+                for (key, value) in index_ref.borrow().iter() {
+                    if !first {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", key, value)?;
+                    write!(f, "{}: ", key)?;
+                    value.fmt_with_seen(f, seen)?;
+                    first = false;
                 }
                 write!(f, "}}")
             }
@@ -133,8 +154,8 @@ impl Hash for Value {
                 for el in elements {
                     el.hash(state);
                 }
-            },
-            _ => panic!("Unhashable")
+            }
+            _ => unreachable!()
         }
     }
 }
