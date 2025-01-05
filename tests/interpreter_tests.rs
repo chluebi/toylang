@@ -152,4 +152,12 @@ mod tests {
             _ => assert!(false),
         }
     }
+
+    #[test]
+    fn function_statements() {
+        match runner::eval("programs/function_statements".to_string()) {
+            Ok(interpreter::Value::Int(4)) => assert!(true),
+            _ => assert!(false),
+        }
+    }
 }

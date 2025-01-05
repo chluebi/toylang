@@ -13,5 +13,5 @@ mod runner;
 
 
 pub fn main() {
-    runner::run("programs/len".to_string());
+    runner::run("programs/function_statements".to_string());
 }

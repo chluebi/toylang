@@ -177,6 +177,18 @@ Statement: parse_ast::LocStatement = {
             loc: start..end
         }
     },
+    <start: @L> <id:Ident> "(" <args:CallArguments> ")" <end: @R> => parse_ast::LocStatement {
+        statement: parse_ast::Statement::FunctionCall {
+            expression: parse_ast::LocExpression {
+                expression: parse_ast::Expression::FunctionCall {
+                    function_name: id,
+                    arguments: args
+                },
+                loc: start..end
+            }
+        },
+        loc: start..end
+    },
     <start: @L> <t:LHSExpression> "[" "]" "=" <value:Expression> <end: @R> => {
         parse_ast::LocStatement {
             statement: parse_ast::Statement::ListAppend {

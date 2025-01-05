@@ -237,6 +237,11 @@ fn process_statement(stmt: parse_ast::Statement) -> Result<ast::Statement, Prepr
             target: process_loc_expression(target)?,
             expression: process_loc_expression(expression)?,
         }),
+        parse_ast::Statement::FunctionCall { expression } => {
+            Ok(ast::Statement::FunctionCall { 
+                expression: process_loc_expression(expression)?
+            })
+        },
         parse_ast::Statement::ListAppend { target, value } => Ok(ast::Statement::ListAppend {
             target: process_loc_expression(target)?,
             value: process_loc_expression(value)?,

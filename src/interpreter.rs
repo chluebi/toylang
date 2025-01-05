@@ -740,6 +740,16 @@ pub fn interpret_statement(state: &mut InterpreterState, stmt: &ast::LocStatemen
                 })
             }
         },
+        ast::Statement::FunctionCall { expression } => {
+            if !(matches!(expression, ast::LocExpression { expression: ast::Expression::FunctionCall {..}, .. })) {
+                return Err(InterpreterErrorMessage {
+                    error: InterpreterError::Panic("Function call statements should always contain function call expressions".to_string()),
+                    range: Some(stmt.loc.clone())
+                });
+            }
+            eval_expression(&state, expression, program)?;
+            Ok(None)
+        },
         ast::Statement::Return { expression } => {
             let return_eval = eval_expression(&state, &expression, program);
             match return_eval {

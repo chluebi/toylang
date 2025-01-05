@@ -237,6 +237,9 @@ pub enum Statement {
         target: LocExpression,
         expression: LocExpression,
     },
+    FunctionCall {
+        expression: LocExpression
+    },
     ListAppend {
         target: LocExpression,
         value: LocExpression
@@ -259,6 +262,7 @@ impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Statement::Assignment { target, expression } => write!(f, "{} = {}", target, expression),
+            Statement::FunctionCall { expression } => write!(f, "{}", expression),
             Statement::ListAppend { target, value } => write!(f, "{}[] = {}", target, value),
             Statement::Return { expression } => write!(f, "return {}", expression),
             Statement::IfElse { condition, if_body, else_body } => {

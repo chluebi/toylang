@@ -1,0 +1,10 @@
+f(l) {
+    l[] = len(l);
+    return l;
+}
+
+main() {
+    a = [1, 2, 3];
+    f(a);
+    return len(a);
+}
